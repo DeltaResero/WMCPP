@@ -30,3 +30,26 @@
 *.exe
 *.out
 *.app
+*.dol
+*.elf
+
+# Build Folder
+/build
+
+# Archive
+*.zip
+
+# Windows thumbnail cache
+Thumbs.db
+
+# Miscellaneous temporary files
+#
+*.bak
+*.diff
+*.kate-swp
+*.orig
+*.patch
+*.rej
+*.swp
+*~
+\#*#
