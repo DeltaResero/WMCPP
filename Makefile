@@ -1,10 +1,14 @@
+# Wii Mandelbrot Computation Project Plus - Makefile
 #---------------------------------------------------------------------------------
-# Clear the implicit built in rules
+# Clear the implicit built-in rules
 #---------------------------------------------------------------------------------
 .SUFFIXES:
+
+#---------------------------------------------------------------------------------
+# Check if DEVKITPPC is set up correctly
 #---------------------------------------------------------------------------------
 ifeq ($(strip $(DEVKITPPC)),)
-$(error "Please set DEVKITPPC in your environment. export DEVKITPPC=<path to>devkitPPC)
+$(error "Please set DEVKITPPC in your environment. export DEVKITPPC=<path to>devkitPPC")
 endif
 
 include $(DEVKITPPC)/wii_rules
@@ -15,31 +19,43 @@ include $(DEVKITPPC)/wii_rules
 # SOURCES is a list of directories containing source code
 # INCLUDES is a list of directories containing extra header files
 #---------------------------------------------------------------------------------
-TARGET		:=	$(notdir $(CURDIR))
-BUILD		:=	build
-SOURCES		:=	source
-DATA		:=	data  
-INCLUDES	:=
+
+TARGET       :=  $(notdir $(CURDIR))
+BUILD        :=  build
+SOURCES      :=  src
+DATA         :=
+INCLUDES     :=
+LIBOGC_INC   :=  $(DEVKITPRO)/libogc/include
+LIBOGC_LIB   :=  $(DEVKITPRO)/libogc/lib/wii
+PORTLIBS     :=  $(DEVKITPRO)/portlibs/wii
 
 #---------------------------------------------------------------------------------
-# options for code generation
+# Compiler and tools
 #---------------------------------------------------------------------------------
 
-CFLAGS	= -g -O2 -mrvl -Wall $(MACHDEP) $(INCLUDE)
-CXXFLAGS	=	$(CFLAGS)
-
-LDFLAGS	=	-g $(MACHDEP) -mrvl -Wl,-Map,$(notdir $@).map
+CC = $(DEVKITPPC)/bin/powerpc-eabi-gcc
+STRIP = $(DEVKITPPC)/bin/powerpc-eabi-strip
 
 #---------------------------------------------------------------------------------
-# any extra libraries we wish to link with the project
+# Options for code generation
 #---------------------------------------------------------------------------------
-LIBS	:=	-logc
+
+CFLAGS      :=  -g -O2 -Wall $(MACHDEP) $(INCLUDE)
+CXXFLAGS    :=  $(CFLAGS)
+
+LDFLAGS     :=  -g $(MACHDEP) -Wl,-Map,$(notdir $@).map
 
 #---------------------------------------------------------------------------------
-# list of directories containing libraries, this must be the top level containing
+# Any extra libraries we wish to link with the project
+#---------------------------------------------------------------------------------
+LIBS        :=  -lwiiuse -lbte -logc -lm -L$(PORTLIBS)/lib
+
+#---------------------------------------------------------------------------------
+# List of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:=
+LIBDIRS     :=  -L$(LIBOGC_LIB) -L$(PORTLIBS)
+
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -48,50 +64,44 @@ LIBDIRS	:=
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 #---------------------------------------------------------------------------------
 
-export OUTPUT	:=	$(CURDIR)/$(TARGET)
+export OUTPUT    :=  $(CURDIR)/$(TARGET)
 
-export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
-					$(foreach dir,$(DATA),$(CURDIR)/$(dir))
+export VPATH     :=  $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
 
-export DEPSDIR	:=	$(CURDIR)/$(BUILD)
-
-#---------------------------------------------------------------------------------
-# automatically build a list of object files for our project
-#---------------------------------------------------------------------------------
-CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
-CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
-sFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
-SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.S)))
-BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
+export DEPSDIR   :=  $(CURDIR)/$(BUILD)
 
 #---------------------------------------------------------------------------------
-# use CXX for linking C++ projects, CC for standard C
+# Automatically build a list of object files for our project
+#---------------------------------------------------------------------------------
+CFILES        :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
+CPPFILES      :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
+sFILES        :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
+SFILES        :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.S)))
+
+#---------------------------------------------------------------------------------
+# Use CXX for linking C++ projects, CC for standard C
 #---------------------------------------------------------------------------------
 ifeq ($(strip $(CPPFILES)),)
-	export LD	:=	$(CC)
+    export LD := $(CC)
 else
-	export LD	:=	$(CXX)
+    export LD := $(CXX)
 endif
 
-export OFILES	:=	$(addsuffix .o,$(BINFILES)) \
-					$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) \
-					$(sFILES:.s=.o) $(SFILES:.S=.o)
+export OFILES    :=  $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(sFILES:.s=.o) $(SFILES:.S=.o)
 
 #---------------------------------------------------------------------------------
-# build a list of include paths
+# Build a list of include paths
 #---------------------------------------------------------------------------------
-export INCLUDE	:=	$(foreach dir,$(INCLUDES), -iquote $(CURDIR)/$(dir)) \
-					$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
-					-I$(CURDIR)/$(BUILD) \
-					-I$(LIBOGC_INC)
+export INCLUDE   :=  $(foreach dir,$(INCLUDES), -iquote $(CURDIR)/$(dir)) \
+                     $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+                     -I$(CURDIR)/$(BUILD) -I$(LIBOGC_INC) -I$(PORTLIBS)/include
 
 #---------------------------------------------------------------------------------
-# build a list of library paths
+# Build a list of library paths
 #---------------------------------------------------------------------------------
-export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib) \
-					-L$(LIBOGC_LIB)
+export LIBPATHS  :=  $(foreach dir,$(LIBDIRS),-L$(dir)/lib) \
+                     -L$(LIBOGC_LIB)
 
-export OUTPUT	:=	$(CURDIR)/$(TARGET)
 .PHONY: $(BUILD) clean
 
 #---------------------------------------------------------------------------------
@@ -106,32 +116,23 @@ clean:
 
 #---------------------------------------------------------------------------------
 run:
-	psoload $(TARGET).dol
-
-#---------------------------------------------------------------------------------
-reload:
-	psoload -r $(TARGET).dol
-
+	wiiload $(TARGET).dol
 
 #---------------------------------------------------------------------------------
 else
 
-DEPENDS	:=	$(OFILES:.o=.d)
+DEPENDS :=  $(OFILES:.o=.d)
 
 #---------------------------------------------------------------------------------
-# main targets
+# Main targets - After creation, strip the ELF file and convert to DOL
 #---------------------------------------------------------------------------------
 $(OUTPUT).dol: $(OUTPUT).elf
+
 $(OUTPUT).elf: $(OFILES)
+	$(LD) -o $@ $(OFILES) $(LIBPATHS) $(LDFLAGS) $(LIBS)
+	$(STRIP) $@
 
 #---------------------------------------------------------------------------------
-# This rule links in binary data with the .jpg extension
-#---------------------------------------------------------------------------------
-%.jpg.o	:	%.jpg
-#---------------------------------------------------------------------------------
-	@echo $(notdir $<)
-	$(bin2o)
-
 -include $(DEPENDS)
 
 #---------------------------------------------------------------------------------
