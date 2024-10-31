@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+	<app version="1.0">
+		<name>Mandelbrot for Wii</name>
+		<coder>krupkat</coder>
+		<version>1.0</version>
+		<release_date>Mar 31, 2008</release_date>
+		<short_description>Mandelbrot Generator</short_description>
+		<long_description>This is a Mandelbrot set generator, you could have seen them on other platforms as well e.g. FractInt for PC.
+I wrote it some time ago for PC but never released it. Then I accidentaly downloaded devkitPro and here you have it
+</long_description>
+	</app>
