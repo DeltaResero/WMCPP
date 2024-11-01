@@ -162,9 +162,9 @@ int main(int argc, char **argv)
       cycle++;
     }
 
-    console_init(xfb[buffer], 20, 20, rmode->fbWidth, 20, fbStride);
-    printf(" cX = %.4f cY = %.4f", centerX, -centerY);
-    printf(" zoom = %.2f", INITIAL_ZOOM / zoom);
+    console_init(xfb[buffer], 0, 20, rmode->fbWidth, 20, fbStride);
+    printf(" cX:%.8f cY:%.8f", centerX, -centerY);
+    printf("  zoom:%.4e ", INITIAL_ZOOM / zoom);
 
     for (int h = 20; h < screenH; h++)
     {
@@ -183,7 +183,7 @@ int main(int argc, char **argv)
       wd = WPAD_Data(0);
       if (wd->ir.valid)
       {
-        printf(" re = %.4f, im = %.4f", (wd->ir.x - screenW2) * zoom + centerX, (screenH2 - wd->ir.y) * zoom - centerY);
+        printf(" re:%.8f im:%.8f", (wd->ir.x - screenW2) * zoom + centerX, (screenH2 - wd->ir.y) * zoom - centerY);
         drawdot(xfb[buffer], rmode, rmode->fbWidth, rmode->xfbHeight, wd->ir.x, wd->ir.y, COLOR_RED);
       }
       else
@@ -297,7 +297,7 @@ static void init()
   VIDEO_Configure(rmode);
   xfb[0] = (u32 *)MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
   xfb[1] = (u32 *)MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
-  console_init(xfb[0], 20, 30, rmode->fbWidth, rmode->xfbHeight, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
+  console_init(xfb[0], 0, 20, rmode->fbWidth, rmode->xfbHeight, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
   VIDEO_ClearFrameBuffer(rmode, xfb[0], COLOR_BLACK);
   VIDEO_ClearFrameBuffer(rmode, xfb[1], COLOR_BLACK);
   VIDEO_SetNextFramebuffer(xfb[0]);
