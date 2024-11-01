@@ -17,6 +17,7 @@ static u32 *xfb[2] = {NULL, NULL};
 static GXRModeObj *rmode;
 
 int reboot = 0, switchoff = 0, evctr = 0;
+int *field = NULL;
 
 void reset()
 {
@@ -63,15 +64,33 @@ void countevs(int chan, const WPADData *data)
   evctr++;
 }
 
-void cleanup()
+void cleanup_field()
 {
   free(field);
+  field = NULL;
+}
+
+void shutdown_system()
+{
+  cleanup_field();
+
+  if (xfb[0])
+  {
+    free(MEM_K1_TO_K0(xfb[0]));
+    xfb[0] = NULL;
+  }
+  if (xfb[1])
+  {
+    free(MEM_K1_TO_K0(xfb[1]));
+    xfb[1] = NULL;
+  }
+
 }
 
 int main(int argc, char **argv)
 {
   init();
-  atexit(cleanup);
+  atexit(cleanup_field);
 
   int res;
   u32 type;
@@ -79,7 +98,7 @@ int main(int argc, char **argv)
 
   const int screenW = rmode->fbWidth;
   const int screenH = rmode->xfbHeight;
-  int *field = (int*)malloc(sizeof(int) * screenW * screenH);
+  field = (int*)malloc(sizeof(int) * screenW * screenH);
 
   double centerX = 0, centerY = 0, oldX = 0, oldY = 0;
   int mouseX = 0, mouseY = 0;
@@ -224,7 +243,7 @@ int main(int argc, char **argv)
 
       if ((wd->btns_h & WPAD_BUTTON_HOME) || reboot)
       {
-        free(field);
+        shutdown_system();
         SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
         exit(0);
       }
@@ -236,6 +255,7 @@ int main(int argc, char **argv)
 
     if (switchoff)
     {
+      shutdown_system();
       SYS_ResetSystem(SYS_POWEROFF, 0, false);
     }
   }
