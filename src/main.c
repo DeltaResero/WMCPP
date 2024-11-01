@@ -11,7 +11,7 @@ const double INITIAL_ZOOM = 0.007;
 const int INITIAL_LIMIT = 200;
 const int CYCLE_OFFSET = 1;
 const int MIN_ITERATION = 1;
-const double MIN_ZOOM = 0.0001;
+const double MAX_ZOOM_PRECISION = 1e-14;
 
 static u32 *xfb[2] = {NULL, NULL};
 static GXRModeObj *rmode;
@@ -122,9 +122,9 @@ int main(int argc, char **argv)
   {
     moving();
     zoom *= 0.35;
-    if (zoom < MIN_ZOOM)
+    if (zoom < MAX_ZOOM_PRECISION)
     {
-      zoom = MIN_ZOOM;
+      zoom = MAX_ZOOM_PRECISION;
     }
     process = 1;
   }
