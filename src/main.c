@@ -39,6 +39,7 @@ void drawdot(void *xfb, GXRModeObj *rmode, float w, float h, float fx, float fy,
   int y = (int)(fy * rmode->xfbHeight / h);
   int x = (int)(fx * rmode->fbWidth / w) >> 1;
   int fbStride = rmode->fbWidth / VI_DISPLAY_PIX_SZ;
+  int fbWidthHalf = rmode->fbWidth >> 1;
 
   for (int py = (y - 4); py <= (y + 4); py++)
   {
@@ -46,7 +47,6 @@ void drawdot(void *xfb, GXRModeObj *rmode, float w, float h, float fx, float fy,
     {
       continue;
     }
-    int fbWidthHalf = rmode->fbWidth >> 1;
     int fbOffset = fbStride * py;
     for (int px = (x - 2); px <= (x + 2); px++)
     {
