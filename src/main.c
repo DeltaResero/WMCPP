@@ -32,7 +32,7 @@ void poweroff()
 }
 
 static void init();
-u32 CvtYUV(int n2, int n1, int limit, uint8_t palette);
+u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex);
 
 void drawdot(void *xfb, GXRModeObj *rmode, float w, float h, float fx, float fy, u32 color)
 {
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
   double centerX = 0, centerY = 0, oldX = 0, oldY = 0;
   int mouseX = 0, mouseY = 0;
   int limit = INITIAL_LIMIT;
-  uint8_t palette = 4;
+  uint8_t paletteIndex = 4;
   double zoom = INITIAL_ZOOM;
   bool process = true, cycling = false;
   int counter = 0, cycle = 0, buffer = 0;
@@ -178,7 +178,7 @@ int main(int argc, char **argv)
         counter++;
         if (counter == 2)
         {
-          xfb[buffer][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, limit, palette);
+          xfb[buffer][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, limit, paletteIndex);
           counter = 0;
         }
       }
@@ -227,11 +227,11 @@ int main(int argc, char **argv)
       }
       if (wd->btns_d & WPAD_BUTTON_MINUS)
       {
-        palette = (palette > 0) ? (palette - 1) : 9;
+        paletteIndex = (paletteIndex > 0) ? (paletteIndex - 1) : 9;
       }
       if (wd->btns_d & WPAD_BUTTON_PLUS)
       {
-        palette = (palette + 1) % 10;
+        paletteIndex = (paletteIndex + 1) % 10;
       }
       if ((wd->btns_h & WPAD_BUTTON_HOME) || reboot)
       {
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
   return 0;
 }
 
-u32 CvtYUV(int n2, int n1, int limit, uint8_t palette)
+u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex)
 {
   int y1, cb1, cr1, y2, cb2, cr2, cb, crx;
 
@@ -263,7 +263,7 @@ u32 CvtYUV(int n2, int n1, int limit, uint8_t palette)
   }
   else
   {
-    Palette(palette, n2, &y1, &cb1, &cr1);
+    Palette(paletteIndex, n2, &y1, &cb1, &cr1);
   }
 
   if (n1 == limit)
@@ -272,7 +272,7 @@ u32 CvtYUV(int n2, int n1, int limit, uint8_t palette)
   }
   else
   {
-    Palette(palette, n1, &y2, &cb2, &cr2);
+    Palette(paletteIndex, n1, &y2, &cb2, &cr2);
   }
 
   cb = (cb1 + cb2) >> 1;
