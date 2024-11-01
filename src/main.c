@@ -214,12 +214,12 @@ int main(int argc, char **argv)
 
       if (wd->btns_d & WPAD_BUTTON_MINUS)
       {
-        palette = (palette > 0) ? (palette - 1) : 10;
+        palette = (palette > 0) ? (palette - 1) : 9;
       }
 
       if (wd->btns_d & WPAD_BUTTON_PLUS)
       {
-        palette = (palette + 1) % 11;
+        palette = (palette + 1) % 10;
       }
 
       if ((wd->btns_h & WPAD_BUTTON_HOME) || reboot)
