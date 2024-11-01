@@ -96,7 +96,7 @@ int main(int argc, char **argv)
   const int screenW = rmode->fbWidth;
   const int screenH = rmode->xfbHeight;
   const int fbStride = rmode->fbWidth * VI_DISPLAY_PIX_SZ;
-  field = (int*)malloc(sizeof(int) * screenW * screenH);
+  field = (int*)memalign(32, sizeof(int) * screenW * screenH);
 
   const int screenW2 = screenW >> 1;
   const int screenH2 = screenH >> 1;
