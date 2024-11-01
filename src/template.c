@@ -7,8 +7,15 @@
 #include <wiiuse/wpad.h>
 #include "palettes.h"
 
+const double INITIAL_ZOOM = 0.007;
+const int INITIAL_LIMIT = 200;
+const int CYCLE_OFFSET = 1;
+const int MIN_ITERATION = 1;
+const double MIN_ZOOM = 0.0001;
+
 static u32 *xfb[2] = {NULL, NULL};
 static GXRModeObj *rmode;
+
 int reboot = 0, switchoff = 0, evctr = 0;
 
 void reset()
@@ -46,7 +53,6 @@ void drawdot(void *xfb, GXRModeObj *rmode, float w, float h, float fx, float fy,
       {
         continue;
       }
-
       fb[rmode->fbWidth / VI_DISPLAY_PIX_SZ * py + px] = color;
     }
   }
@@ -57,28 +63,32 @@ void countevs(int chan, const WPADData *data)
   evctr++;
 }
 
+void cleanup()
+{
+  free(field);
+}
+
 int main(int argc, char **argv)
 {
   init();
+  atexit(cleanup);
+
   int res;
   u32 type;
   WPADData *wd;
+
   const int screenW = rmode->fbWidth;
   const int screenH = rmode->xfbHeight;
   int *field = (int*)malloc(sizeof(int) * screenW * screenH);
-  double stredX = 0, stredY = 0;
-  double oldX = 0, oldY = 0;
-  int mousex = 0, mousey = 0, x = 0, y = 0;
-  int limit = 200, paleta = 4;
-  double zoom = 0.007;
-  int proces = 1, counter = 0, first = 1;
-  int n1 = 0;
-  int n2 = 0;
-  int w = 0;
-  int h = 0;
+
+  double stredX = 0, stredY = 0, oldX = 0, oldY = 0;
+  int mousex = 0, mousey = 0;
+  int limit = INITIAL_LIMIT, paleta = 4;
+  double zoom = INITIAL_ZOOM;
+  int proces = 1, counter = 0, cycle = 0, buffer = 0;
   int cycling = 0;
-  int cycle = 0, buffer = 0;
-  double cr = 0, ci = 0, zr1 = 0, zr = 0, zi1 = 0, zi = 0;
+
+  double cr, ci, zr1, zr, zi1, zi;
 
   void moving()
   {
@@ -93,6 +103,10 @@ int main(int argc, char **argv)
   {
     moving();
     zoom *= 0.35;
+    if (zoom < MIN_ZOOM)
+    {
+      zoom = MIN_ZOOM;
+    }
     proces = 1;
   }
 
@@ -102,65 +116,51 @@ int main(int argc, char **argv)
 
     if (proces == 1)
     {
-      h = 20;
-
-      for (; h < screenH; h++)
+      for (int h = 20; h < screenH; h++)
       {
-        w = 0;
-
-        for (; w < screenW; w++)
+        for (int w = 0; w < screenW; w++)
         {
-          cr = 0;
-          ci = 0;
-          n1 = 0;
-          zr1 = 0;
-          zr = 0;
-          zi1 = 0;
-          zi = 0;
           cr = (w - screenW / 2) * zoom + stredX;
           ci = -1.0 * (h - screenH / 2) * zoom - stredY;
+          zr1 = zr = zi1 = zi = 0;
+          int n1 = 0;
 
-          for (; (zr * zr + zi * zi) < 4 && n1 != limit; n1++)
+          while ((zr * zr + zi * zi) < 4 && n1 != limit)
           {
             zi = 2 * zi1 * zr1 + ci;
             zr = (zr1 * zr1) - (zi1 * zi1) + cr;
             zr1 = zr;
             zi1 = zi;
+            n1++;
           }
 
           field[w + (screenW * h)] = n1;
         }
       }
       proces = 0;
-      first = 1;
     }
 
-    if (cycling == true)
+    if (cycling)
     {
       cycle++;
     }
 
     console_init(xfb[buffer], 20, 20, rmode->fbWidth, 20, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
     printf(" cX = %.4f cY = %.4f", stredX, -stredY);
-    printf(" zoom = %.2f", 0.007 / zoom);
-    h = 20;
+    printf(" zoom = %.2f", INITIAL_ZOOM / zoom);
 
-    for (; h < screenH; h++)
+    for (int h = 20; h < screenH; h++)
     {
-      w = 0;
-
-      for (; w < screenW; w++)
+      for (int w = 0; w < screenW; w++)
       {
-        n1 = field[w + screenW * h] + cycle;
+        int n1 = field[w + screenW * h] + cycle;
         counter++;
 
         if (counter == 2)
         {
-          xfb[buffer][(w / 2) + (screenW * h / 2)] = CvtRGB(n2, n1, limit, paleta);
+          xfb[buffer][(w / 2) + (screenW * h / 2)] = CvtRGB(n1, n1, limit, paleta);
           counter = 0;
         }
-
-        n2 = n1;
       }
     }
 
@@ -173,15 +173,12 @@ int main(int argc, char **argv)
 
       if (wd->ir.valid)
       {
-        printf("  re = % .4f, im = % .4f", (wd->ir.x - screenW / 2) * zoom + stredX,
-                                             (screenH / 2 - wd->ir.y) * zoom - stredY);
-        x = wd->ir.x / 2;
-        y = wd->ir.y;
+        printf(" re = %.4f, im = %.4f", (wd->ir.x - screenW / 2) * zoom + stredX, (screenH / 2 - wd->ir.y) * zoom - stredY);
         drawdot(xfb[buffer], rmode, rmode->fbWidth, rmode->xfbHeight, wd->ir.x, wd->ir.y, COLOR_RED);
       }
       else
       {
-        printf("  No Cursor");
+        printf(" No Cursor");
       }
 
       if (wd->btns_h & WPAD_BUTTON_A)
@@ -193,11 +190,8 @@ int main(int argc, char **argv)
 
       if (wd->btns_h & WPAD_BUTTON_B)
       {
-        zoom = 0.007;
-        stredX = 0;
-        stredY = 0;
-        oldX = 0;
-        oldY = 0;
+        zoom = INITIAL_ZOOM;
+        stredX = stredY = oldX = oldY = 0;
         proces = 1;
       }
 
@@ -208,7 +202,7 @@ int main(int argc, char **argv)
 
       if (wd->btns_h & WPAD_BUTTON_2)
       {
-        limit /= 2;
+        limit = (limit > MIN_ITERATION) ? (limit / 2) : MIN_ITERATION;
         proces = 1;
       }
 
@@ -220,22 +214,18 @@ int main(int argc, char **argv)
 
       if (wd->btns_d & WPAD_BUTTON_MINUS)
       {
-        paleta--;
-        if (paleta < 0)
-        {
-          paleta = 10;
-        }
+        paleta = (paleta > 0) ? (paleta - 1) : 10;
       }
 
       if (wd->btns_d & WPAD_BUTTON_PLUS)
       {
-        paleta++;
-        paleta %= 11;
+        paleta = (paleta + 1) % 11;
       }
 
       if ((wd->btns_h & WPAD_BUTTON_HOME) || reboot)
       {
         free(field);
+        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
         exit(0);
       }
     }
