@@ -107,7 +107,7 @@ int main(int argc, char **argv)
   uint8_t paletteIndex = 4;
   double zoom = INITIAL_ZOOM;
   bool process = true, cycling = false;
-  int counter = 0, cycle = 0, buffer = 0;
+  int cycle = 0, buffer = 0;
 
   void moving()
   {
@@ -173,12 +173,7 @@ int main(int argc, char **argv)
       for (int w = 0; w < screenW; w++)
       {
         int n1 = field[w + screenW * h] + cycle;
-        counter++;
-        if (counter == 2)
-        {
-          xfb[buffer][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, limit, paletteIndex);
-          counter = 0;
-        }
+        xfb[buffer][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, limit, paletteIndex);
       }
     }
 
