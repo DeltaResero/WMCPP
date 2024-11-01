@@ -191,13 +191,13 @@ int main(int argc, char **argv)
         printf(" No Cursor");
       }
 
-      if (wd->btns_h & WPAD_BUTTON_A)
+      if (wd->btns_d & WPAD_BUTTON_A)
       {
         mouseX = wd->ir.x;
         mouseY = wd->ir.y;
         zooming();
       }
-      if (wd->btns_h & WPAD_BUTTON_B)
+      if (wd->btns_d & WPAD_BUTTON_B)
       {
         zoom = INITIAL_ZOOM;
         centerX = centerY = oldX = oldY = 0;
@@ -207,12 +207,12 @@ int main(int argc, char **argv)
       {
         cycling = !cycling;
       }
-      if (wd->btns_h & WPAD_BUTTON_2)
+      if (wd->btns_d & WPAD_BUTTON_2)
       {
         limit = (limit > 1) ? (limit >> 1) : 1;
         process = true;
       }
-      if (wd->btns_h & WPAD_BUTTON_1)
+      if (wd->btns_d & WPAD_BUTTON_1)
       {
         limit = (limit < LIMIT_MAX) ? (limit << 1) : LIMIT_MAX;
         process = true;
@@ -225,7 +225,7 @@ int main(int argc, char **argv)
       {
         paletteIndex = (paletteIndex + 1) % 10;
       }
-      if ((wd->btns_h & WPAD_BUTTON_HOME) || reboot)
+      if ((wd->btns_d & WPAD_BUTTON_HOME) || reboot)
       {
         shutdown_system();
         SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
