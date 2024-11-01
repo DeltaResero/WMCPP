@@ -29,7 +29,7 @@ void poweroff()
 }
 
 static void init();
-u32 CvtRGB(int n2, int n1, int limit, int paleta);
+u32 CvtRGB(int n2, int n1, int limit, int palette);
 
 void drawdot(void *xfb, GXRModeObj *rmode, float w, float h, float fx, float fy, u32 color)
 {
@@ -81,22 +81,22 @@ int main(int argc, char **argv)
   const int screenH = rmode->xfbHeight;
   int *field = (int*)malloc(sizeof(int) * screenW * screenH);
 
-  double stredX = 0, stredY = 0, oldX = 0, oldY = 0;
-  int mousex = 0, mousey = 0;
-  int limit = INITIAL_LIMIT, paleta = 4;
+  double centerX = 0, centerY = 0, oldX = 0, oldY = 0;
+  int mouseX = 0, mouseY = 0;
+  int limit = INITIAL_LIMIT, palette = 4;
   double zoom = INITIAL_ZOOM;
-  int proces = 1, counter = 0, cycle = 0, buffer = 0;
+  int process = 1, counter = 0, cycle = 0, buffer = 0;
   int cycling = 0;
 
   double cr, ci, zr1, zr, zi1, zi;
 
   void moving()
   {
-    stredX = mousex * zoom - (screenW / 2) * zoom + oldX;
-    oldX = stredX;
-    stredY = mousey * zoom - (screenH / 2) * zoom + oldY;
-    oldY = stredY;
-    proces = 1;
+    centerX = mouseX * zoom - (screenW / 2) * zoom + oldX;
+    oldX = centerX;
+    centerY = mouseY * zoom - (screenH / 2) * zoom + oldY;
+    oldY = centerY;
+    process = 1;
   }
 
   void zooming()
@@ -107,21 +107,21 @@ int main(int argc, char **argv)
     {
       zoom = MIN_ZOOM;
     }
-    proces = 1;
+    process = 1;
   }
 
   while (1)
   {
     buffer ^= 1;
 
-    if (proces == 1)
+    if (process == 1)
     {
       for (int h = 20; h < screenH; h++)
       {
         for (int w = 0; w < screenW; w++)
         {
-          cr = (w - screenW / 2) * zoom + stredX;
-          ci = -1.0 * (h - screenH / 2) * zoom - stredY;
+          cr = (w - screenW / 2) * zoom + centerX;
+          ci = -1.0 * (h - screenH / 2) * zoom - centerY;
           zr1 = zr = zi1 = zi = 0;
           int n1 = 0;
 
@@ -137,7 +137,7 @@ int main(int argc, char **argv)
           field[w + (screenW * h)] = n1;
         }
       }
-      proces = 0;
+      process = 0;
     }
 
     if (cycling)
@@ -146,7 +146,7 @@ int main(int argc, char **argv)
     }
 
     console_init(xfb[buffer], 20, 20, rmode->fbWidth, 20, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
-    printf(" cX = %.4f cY = %.4f", stredX, -stredY);
+    printf(" cX = %.4f cY = %.4f", centerX, -centerY);
     printf(" zoom = %.2f", INITIAL_ZOOM / zoom);
 
     for (int h = 20; h < screenH; h++)
@@ -158,7 +158,7 @@ int main(int argc, char **argv)
 
         if (counter == 2)
         {
-          xfb[buffer][(w / 2) + (screenW * h / 2)] = CvtRGB(n1, n1, limit, paleta);
+          xfb[buffer][(w / 2) + (screenW * h / 2)] = CvtRGB(n1, n1, limit, palette);
           counter = 0;
         }
       }
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
 
       if (wd->ir.valid)
       {
-        printf(" re = %.4f, im = %.4f", (wd->ir.x - screenW / 2) * zoom + stredX, (screenH / 2 - wd->ir.y) * zoom - stredY);
+        printf(" re = %.4f, im = %.4f", (wd->ir.x - screenW / 2) * zoom + centerX, (screenH / 2 - wd->ir.y) * zoom - centerY);
         drawdot(xfb[buffer], rmode, rmode->fbWidth, rmode->xfbHeight, wd->ir.x, wd->ir.y, COLOR_RED);
       }
       else
@@ -183,16 +183,16 @@ int main(int argc, char **argv)
 
       if (wd->btns_h & WPAD_BUTTON_A)
       {
-        mousex = wd->ir.x;
-        mousey = wd->ir.y;
+        mouseX = wd->ir.x;
+        mouseY = wd->ir.y;
         zooming();
       }
 
       if (wd->btns_h & WPAD_BUTTON_B)
       {
         zoom = INITIAL_ZOOM;
-        stredX = stredY = oldX = oldY = 0;
-        proces = 1;
+        centerX = centerY = oldX = oldY = 0;
+        process = 1;
       }
 
       if (wd->btns_d & WPAD_BUTTON_DOWN)
@@ -203,23 +203,23 @@ int main(int argc, char **argv)
       if (wd->btns_h & WPAD_BUTTON_2)
       {
         limit = (limit > MIN_ITERATION) ? (limit / 2) : MIN_ITERATION;
-        proces = 1;
+        process = 1;
       }
 
       if (wd->btns_h & WPAD_BUTTON_1)
       {
         limit *= 2;
-        proces = 1;
+        process = 1;
       }
 
       if (wd->btns_d & WPAD_BUTTON_MINUS)
       {
-        paleta = (paleta > 0) ? (paleta - 1) : 10;
+        palette = (palette > 0) ? (palette - 1) : 10;
       }
 
       if (wd->btns_d & WPAD_BUTTON_PLUS)
       {
-        paleta = (paleta + 1) % 11;
+        palette = (palette + 1) % 11;
       }
 
       if ((wd->btns_h & WPAD_BUTTON_HOME) || reboot)
@@ -243,7 +243,7 @@ int main(int argc, char **argv)
   return 0;
 }
 
-u32 CvtRGB(int n2, int n1, int limit, int paleta)
+u32 CvtRGB(int n2, int n1, int limit, int palette)
 {
   int y1, cb1, cr1, y2, cb2, cr2, cb, crx, r, g, b;
 
@@ -255,7 +255,7 @@ u32 CvtRGB(int n2, int n1, int limit, int paleta)
   }
   else
   {
-    Paleta(paleta, n2, &r, &g, &b);
+    Palette(palette, n2, &r, &g, &b);
     y1 = (299 * r + 587 * g + 114 * b) / 1000;
     cb1 = (-16874 * r - 33126 * g + 50000 * b + 12800000) / 100000;
     cr1 = (50000 * r - 41869 * g - 8131 * b + 12800000) / 100000;
@@ -269,7 +269,7 @@ u32 CvtRGB(int n2, int n1, int limit, int paleta)
   }
   else
   {
-    Paleta(paleta, n1, &r, &g, &b);
+    Palette(palette, n1, &r, &g, &b);
     y2 = (299 * r + 587 * g + 114 * b) / 1000;
     cb2 = (-16874 * r - 33126 * g + 50000 * b + 12800000) / 100000;
     cr2 = (50000 * r - 41869 * g - 8131 * b + 12800000) / 100000;
