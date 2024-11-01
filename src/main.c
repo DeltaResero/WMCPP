@@ -15,7 +15,6 @@ const double MAX_ZOOM_PRECISION = 1e-14;
 
 static u32 *xfb[2] = {NULL, NULL};
 static GXRModeObj *rmode;
-
 int evctr = 0;
 bool reboot = false, switchoff = false;
 int *field = NULL;
@@ -35,10 +34,10 @@ u32 CvtRGB(int n2, int n1, int limit, int palette);
 
 void drawdot(void *xfb, GXRModeObj *rmode, float w, float h, float fx, float fy, u32 color)
 {
-  u32 *fb;
-  fb = (u32*)xfb;
-  int y = fy * rmode->xfbHeight / h;
-  int x = fx * rmode->fbWidth / w / 2;
+  u32 *fb = (u32*)xfb;
+  int y = (int)(fy * rmode->xfbHeight / h);
+  int x = (int)(fx * rmode->fbWidth / w) >> 1;
+  int fbStride = rmode->fbWidth / VI_DISPLAY_PIX_SZ;
 
   for (int py = (y - 4); py <= (y + 4); py++)
   {
@@ -46,14 +45,15 @@ void drawdot(void *xfb, GXRModeObj *rmode, float w, float h, float fx, float fy,
     {
       continue;
     }
-
+    int fbWidthHalf = rmode->fbWidth >> 1;
+    int fbOffset = fbStride * py;
     for (int px = (x - 2); px <= (x + 2); px++)
     {
-      if (px < 0 || px >= rmode->fbWidth / 2)
+      if (px < 0 || px >= fbWidthHalf)
       {
         continue;
       }
-      fb[rmode->fbWidth / VI_DISPLAY_PIX_SZ * py + px] = color;
+      fb[fbOffset + px] = color;
     }
   }
 }
@@ -72,7 +72,6 @@ void cleanup_field()
 void shutdown_system()
 {
   cleanup_field();
-
   if (xfb[0])
   {
     free(MEM_K1_TO_K0(xfb[0]));
@@ -83,7 +82,6 @@ void shutdown_system()
     free(MEM_K1_TO_K0(xfb[1]));
     xfb[1] = NULL;
   }
-
 }
 
 int main(int argc, char **argv)
@@ -97,7 +95,11 @@ int main(int argc, char **argv)
 
   const int screenW = rmode->fbWidth;
   const int screenH = rmode->xfbHeight;
+  const int fbStride = rmode->fbWidth * VI_DISPLAY_PIX_SZ;
   field = (int*)malloc(sizeof(int) * screenW * screenH);
+
+  const int screenW2 = screenW >> 1;
+  const int screenH2 = screenH >> 1;
 
   double centerX = 0, centerY = 0, oldX = 0, oldY = 0;
   int mouseX = 0, mouseY = 0;
@@ -108,9 +110,9 @@ int main(int argc, char **argv)
 
   void moving()
   {
-    centerX = mouseX * zoom - (screenW / 2) * zoom + oldX;
+    centerX = mouseX * zoom - screenW2 * zoom + oldX;
     oldX = centerX;
-    centerY = mouseY * zoom - (screenH / 2) * zoom + oldY;
+    centerY = mouseY * zoom - screenH2 * zoom + oldY;
     oldY = centerY;
     process = true;
   }
@@ -129,20 +131,18 @@ int main(int argc, char **argv)
   while (true)
   {
     buffer ^= 1;
-
     if (process)
     {
       for (int h = 20; h < screenH; h++)
       {
-        double ci = -1.0 * (h - screenH / 2) * zoom - centerY;
-
+        int screenWH = screenW * h;
+        double ci = -1.0 * (h - screenH2) * zoom - centerY;
         for (int w = 0; w < screenW; w++)
         {
-          double cr = (w - screenW / 2) * zoom + centerX;
+          double cr = (w - screenW2) * zoom + centerX;
           double zr1 = 0, zr = 0, zi1 = 0, zi = 0;
           int n1 = 0;
           double zrSquared, ziSquared;
-
           while ((zrSquared = zr1 * zr1) + (ziSquared = zi1 * zi1) < 4 && n1 != limit)
           {
             zi = 2 * zi1 * zr1 + ci;
@@ -151,8 +151,7 @@ int main(int argc, char **argv)
             zi1 = zi;
             n1++;
           }
-
-          field[w + (screenW * h)] = n1;
+          field[w + screenWH] = n1;
         }
       }
       process = false;
@@ -163,20 +162,20 @@ int main(int argc, char **argv)
       cycle++;
     }
 
-    console_init(xfb[buffer], 20, 20, rmode->fbWidth, 20, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
+    console_init(xfb[buffer], 20, 20, rmode->fbWidth, 20, fbStride);
     printf(" cX = %.4f cY = %.4f", centerX, -centerY);
     printf(" zoom = %.2f", INITIAL_ZOOM / zoom);
 
     for (int h = 20; h < screenH; h++)
     {
+      int screenWHHalf = (screenW * h) >> 1;
       for (int w = 0; w < screenW; w++)
       {
         int n1 = field[w + screenW * h] + cycle;
         counter++;
-
         if (counter == 2)
         {
-          xfb[buffer][(w / 2) + (screenW * h / 2)] = CvtRGB(n1, n1, limit, palette);
+          xfb[buffer][(w >> 1) + screenWHHalf] = CvtRGB(n1, n1, limit, palette);
           counter = 0;
         }
       }
@@ -184,14 +183,12 @@ int main(int argc, char **argv)
 
     WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
     res = WPAD_Probe(0, &type);
-
     if (res == WPAD_ERR_NONE)
     {
       wd = WPAD_Data(0);
-
       if (wd->ir.valid)
       {
-        printf(" re = %.4f, im = %.4f", (wd->ir.x - screenW / 2) * zoom + centerX, (screenH / 2 - wd->ir.y) * zoom - centerY);
+        printf(" re = %.4f, im = %.4f", (wd->ir.x - screenW2) * zoom + centerX, (screenH2 - wd->ir.y) * zoom - centerY);
         drawdot(xfb[buffer], rmode, rmode->fbWidth, rmode->xfbHeight, wd->ir.x, wd->ir.y, COLOR_RED);
       }
       else
@@ -205,41 +202,34 @@ int main(int argc, char **argv)
         mouseY = wd->ir.y;
         zooming();
       }
-
       if (wd->btns_h & WPAD_BUTTON_B)
       {
         zoom = INITIAL_ZOOM;
         centerX = centerY = oldX = oldY = 0;
         process = true;
       }
-
       if (wd->btns_d & WPAD_BUTTON_DOWN)
       {
         cycling ^= 1;
       }
-
       if (wd->btns_h & WPAD_BUTTON_2)
       {
-        limit = (limit > MIN_ITERATION) ? (limit / 2) : MIN_ITERATION;
+        limit = (limit > MIN_ITERATION) ? (limit >> 1) : MIN_ITERATION;
         process = true;
       }
-
       if (wd->btns_h & WPAD_BUTTON_1)
       {
-        limit *= 2;
+        limit <<= 1;
         process = true;
       }
-
       if (wd->btns_d & WPAD_BUTTON_MINUS)
       {
         palette = (palette > 0) ? (palette - 1) : 9;
       }
-
       if (wd->btns_d & WPAD_BUTTON_PLUS)
       {
         palette = (palette + 1) % 10;
       }
-
       if ((wd->btns_h & WPAD_BUTTON_HOME) || reboot)
       {
         shutdown_system();
@@ -251,14 +241,12 @@ int main(int argc, char **argv)
     VIDEO_SetNextFramebuffer(xfb[buffer]);
     VIDEO_Flush();
     VIDEO_WaitVSync();
-
     if (switchoff)
     {
       shutdown_system();
       SYS_ResetSystem(SYS_POWEROFF, 0, false);
     }
   }
-
   return 0;
 }
 
@@ -296,7 +284,6 @@ u32 CvtRGB(int n2, int n1, int limit, int palette)
 
   cb = (cb1 + cb2) >> 1;
   crx = (cr1 + cr2) >> 1;
-
   return (y1 << 24) | (cb << 16) | (y2 << 8) | crx;
 }
 
@@ -332,12 +319,10 @@ static void init()
   VIDEO_SetBlack(0);
   VIDEO_Flush();
   VIDEO_WaitVSync();
-
   if (rmode->viTVMode & VI_NON_INTERLACE)
   {
     VIDEO_WaitVSync();
   }
-
   WPAD_SetDataFormat(0, WPAD_FMT_BTNS_ACC_IR);
   WPAD_SetVRes(0, rmode->fbWidth, rmode->xfbHeight);
 }
