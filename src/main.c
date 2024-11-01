@@ -130,7 +130,7 @@ int main(int argc, char **argv)
 
   while (true)
   {
-    buffer ^= 1;
+    buffer = !buffer;
     if (process)
     {
       for (int h = 20; h < screenH; h++)
@@ -210,7 +210,7 @@ int main(int argc, char **argv)
       }
       if (wd->btns_d & WPAD_BUTTON_DOWN)
       {
-        cycling ^= 1;
+        cycling = !cycling;
       }
       if (wd->btns_h & WPAD_BUTTON_2)
       {
