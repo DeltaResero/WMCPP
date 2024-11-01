@@ -141,15 +141,14 @@ int main(int argc, char **argv)
         for (int w = 0; w < screenW; w++)
         {
           double cr = (w - screenW2) * zoom + centerX;
-          double zr1 = 0, zr = 0, zi1 = 0, zi = 0;
+          double zr = 0, zi = 0;
           int n1 = 0;
           double zrSquared, ziSquared;
-          while ((zrSquared = zr1 * zr1) + (ziSquared = zi1 * zi1) < 4 && n1 != limit)
+          while ((zrSquared = zr * zr) + (ziSquared = zi * zi) < 4 && n1 != limit)
           {
-            zi = 2 * zi1 * zr1 + ci;
+            double temp = 2 * zr * zi + ci;
             zr = zrSquared - ziSquared + cr;
-            zr1 = zr;
-            zi1 = zi;
+            zi = temp;
             n1++;
           }
           field[w + screenWH] = n1;
