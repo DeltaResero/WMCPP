@@ -11,11 +11,9 @@
 
 const double INITIAL_ZOOM = 0.007;
 const int INITIAL_LIMIT = 200;
-const int CYCLE_OFFSET = 1;
-const int MIN_ITERATION = 1;
 const double MAX_ZOOM_PRECISION = 1e-14;
 
-static u32 *xfb[2] = {NULL, NULL};
+static u32 *xfb[2] = { NULL, NULL };
 static GXRModeObj *rmode;
 int evctr = 0;
 bool reboot = false, switchoff = false;
@@ -217,7 +215,7 @@ int main(int argc, char **argv)
       }
       if (wd->btns_h & WPAD_BUTTON_2)
       {
-        limit = (limit > MIN_ITERATION) ? (limit >> 1) : MIN_ITERATION;
+        limit = (limit > 1) ? (limit >> 1) : 1;
         process = true;
       }
       if (wd->btns_h & WPAD_BUTTON_1)
