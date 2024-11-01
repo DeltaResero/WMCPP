@@ -40,10 +40,10 @@ STRIP = $(DEVKITPPC)/bin/powerpc-eabi-strip
 # Options for code generation
 #---------------------------------------------------------------------------------
 
-CFLAGS      :=  -g -O2 -Wall $(MACHDEP) $(INCLUDE)
+CFLAGS      :=  -O2 -Wall -flto $(MACHDEP) $(INCLUDE)
 CXXFLAGS    :=  $(CFLAGS)
 
-LDFLAGS     :=  -g $(MACHDEP) -Wl,-Map,$(notdir $@).map
+LDFLAGS     :=  -flto $(MACHDEP) -Wl,-Map,$(notdir $@).map
 
 #---------------------------------------------------------------------------------
 # Any extra libraries we wish to link with the project
