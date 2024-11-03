@@ -32,30 +32,42 @@ void poweroff()
 static void init();
 u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex);
 
-void drawdot(void *xfb, GXRModeObj *rmode, float w, float h, float fx, float fy, u32 color)
+static inline u32 fast_reciprocal(u32 a)
+{
+  // Newton-Raphson iteration for 1/x
+  // This gives us about 16 bits of precision
+  u32 x = 0x7FFFFFFF / (a | 1);  // Initial guess
+  x = x * (0x20000 - ((a * x) >> 16)) >> 15;  // One iteration
+  return x;
+}
+
+static inline void drawdot(void *xfb, GXRModeObj *rmode, u16 fx, u16 fy, u32 color)
 {
   u32 *fb = (u32 *)xfb;
-  int y = (int)(fy * rmode->xfbHeight / h);
-  int x = (int)(fx * rmode->fbWidth / w) >> 1;
-  int fbStride = rmode->fbWidth / VI_DISPLAY_PIX_SZ;
-  int fbWidthHalf = rmode->fbWidth >> 1;
+  const u32 fbWidthHalf = rmode->fbWidth >> 1;
+  const u32 fbStride = fbWidthHalf; // Since VI_DISPLAY_PIX_SZ is 2
 
-  for (int py = (y - 4); py <= (y + 4); py++)
+  const int x = fx >> 1;
+  const int y = fy;
+
+  const int y_start = (y - 4 >= 0) ? y - 4 : 0;
+  const int y_end = (y + 4 < rmode->xfbHeight) ? y + 4 : rmode->xfbHeight - 1;
+  const int x_start = (x - 2 >= 0) ? x - 2 : 0;
+  const int x_end = (x + 2 < fbWidthHalf) ? x + 2 : fbWidthHalf - 1;
+
+  int py = y_start;
+  do
   {
-    if (py < 0 || py >= rmode->xfbHeight)
+    u32 fbOffset = fbStride * py;
+    int px = x_start;
+
+    do
     {
-      continue;
-    }
-    int fbOffset = fbStride * py;
-    for (int px = (x - 2); px <= (x + 2); px++)
-    {
-      if (px < 0 || px >= fbWidthHalf)
-      {
-        continue;
-      }
       fb[fbOffset + px] = color;
-    }
-  }
+      px++;
+    } while (px <= x_end);
+    py++;
+  } while (py <= y_end);
 }
 
 void countevs(int chan, const WPADData *data)
@@ -184,7 +196,7 @@ int main(int argc, char **argv)
       if (wd->ir.valid)
       {
         printf(" re:%.8f im:%.8f", (wd->ir.x - screenW2) * zoom + centerX, (screenH2 - wd->ir.y) * zoom - centerY);
-        drawdot(xfb[buffer], rmode, rmode->fbWidth, rmode->xfbHeight, wd->ir.x, wd->ir.y, COLOR_RED);
+        drawdot(xfb[buffer], rmode, (u16)wd->ir.x, (u16)wd->ir.y, COLOR_RED);
       }
       else
       {
