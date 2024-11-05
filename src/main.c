@@ -114,15 +114,15 @@ static inline void drawdot(void *xfb, GXRModeObj *rmode, u16 fx, u16 fy, u32 col
     do
     {
       fb[fbOffset + px] = color;
-      px++;
+      ++px;
     } while (px <= x_end);
-    py++;
+    ++py;
   } while (py <= y_end);
 }
 
 void countevs(int chan, const WPADData *data)
 {
-  evctr++;
+  ++evctr;
 }
 
 void cleanup_field()
@@ -192,13 +192,13 @@ int main(int argc, char **argv)
             zi = temp;
             zrSquared = zr * zr;
             ziSquared = zi * zi;
-            n1++;
+            ++n1;
           } while (zrSquared + ziSquared < 4 && n1 != state.limit);
 
           field[w + screenWH] = n1;
-          w++;
+          ++w;
         } while (w < screenW);
-        h++;
+        ++h;
       } while (h < screenH);
 
       state.process = false;
@@ -206,7 +206,7 @@ int main(int argc, char **argv)
 
     if (state.cycling)
     {
-      state.cycle++;
+      ++state.cycle;
     }
 
     console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
@@ -222,9 +222,9 @@ int main(int argc, char **argv)
       {
         int n1 = field[w + screenW * h] + state.cycle;
         xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
-        w++;
+        ++w;
       } while (w < screenW);
-      h++;
+      ++h;
     } while (h < screenH);
 
     WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
