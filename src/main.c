@@ -13,6 +13,22 @@ const int INITIAL_LIMIT = 200;
 const int LIMIT_MAX = 3200;
 const double MAX_ZOOM_PRECISION = 1e-14;
 
+typedef struct
+{
+  double centerX;
+  double centerY;
+  double oldX;
+  double oldY;
+  int mouseX;
+  int mouseY;
+  int limit;
+  uint8_t paletteIndex;
+  double zoom;
+  bool process;
+  bool cycling;
+  int cycle;
+} MandelbrotState;
+
 static u32 *xfb[2] = { NULL, NULL };
 static GXRModeObj *rmode;
 int evctr = 0;
@@ -32,6 +48,42 @@ void poweroff()
 static void init();
 u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex);
 
+void initMandelbrotState(MandelbrotState *state)
+{
+  state->centerX = 0;
+  state->centerY = 0;
+  state->oldX = 0;
+  state->oldY = 0;
+  state->mouseX = 0;
+  state->mouseY = 0;
+  state->limit = INITIAL_LIMIT;
+  state->paletteIndex = 4;
+  state->zoom = INITIAL_ZOOM;
+  state->process = true;
+  state->cycling = false;
+  state->cycle = 0;
+}
+
+void moveView(MandelbrotState *state, int screenW2, int screenH2)
+{
+  state->centerX = state->mouseX * state->zoom - screenW2 * state->zoom + state->oldX;
+  state->oldX = state->centerX;
+  state->centerY = state->mouseY * state->zoom - screenH2 * state->zoom + state->oldY;
+  state->oldY = state->centerY;
+  state->process = true;
+}
+
+void zoomView(MandelbrotState *state, int screenW2, int screenH2)
+{
+  moveView(state, screenW2, screenH2);
+  state->zoom *= 0.35;
+  if (state->zoom < MAX_ZOOM_PRECISION)
+  {
+    state->zoom = MAX_ZOOM_PRECISION;
+  }
+  state->process = true;
+}
+
 static inline u32 fast_reciprocal(u32 a)
 {
   // Newton-Raphson iteration for 1/x
@@ -45,8 +97,7 @@ static inline void drawdot(void *xfb, GXRModeObj *rmode, u16 fx, u16 fy, u32 col
 {
   u32 *fb = (u32 *)xfb;
   const u32 fbWidthHalf = rmode->fbWidth >> 1;
-  const u32 fbStride = fbWidthHalf; // Since VI_DISPLAY_PIX_SZ is 2
-
+  const u32 fbStride = fbWidthHalf;  // Since VI_DISPLAY_PIX_SZ is 2
   const int x = fx >> 1;
   const int y = fy;
 
@@ -60,7 +111,6 @@ static inline void drawdot(void *xfb, GXRModeObj *rmode, u16 fx, u16 fy, u32 col
   {
     u32 fbOffset = fbStride * py;
     int px = x_start;
-
     do
     {
       fb[fbOffset + px] = color;
@@ -104,98 +154,91 @@ int main(int argc, char **argv)
   int res;
   u32 type;
   WPADData *wd;
-
   const int screenW = rmode->fbWidth;
   const int screenH = rmode->xfbHeight;
   const int fbStride = rmode->fbWidth * VI_DISPLAY_PIX_SZ;
-  field = (int *)memalign(32, sizeof(int) * screenW * screenH);
 
+  field = (int *)memalign(32, sizeof(int) * screenW * screenH);
   const int screenW2 = screenW >> 1;
   const int screenH2 = screenH >> 1;
 
-  double centerX = 0, centerY = 0, oldX = 0, oldY = 0;
-  int mouseX = 0, mouseY = 0;
-  int limit = INITIAL_LIMIT;
-  uint8_t paletteIndex = 4;
-  double zoom = INITIAL_ZOOM;
-  bool process = true, cycling = false;
-  int cycle = 0, buffer = 0;
-
-  void moving()
-  {
-    centerX = mouseX * zoom - screenW2 * zoom + oldX;
-    oldX = centerX;
-    centerY = mouseY * zoom - screenH2 * zoom + oldY;
-    oldY = centerY;
-    process = true;
-  }
-
-  void zooming()
-  {
-    moving();
-    zoom *= 0.35;
-    if (zoom < MAX_ZOOM_PRECISION)
-    {
-      zoom = MAX_ZOOM_PRECISION;
-    }
-    process = true;
-  }
+  MandelbrotState state;
+  initMandelbrotState(&state);
+  int buffer = 0;
 
   while (true)
   {
     buffer = !buffer;
-    if (process)
+
+    if (state.process)
     {
-      for (int h = 20; h < screenH; h++)
+      int h = 20;
+      do
       {
         int screenWH = screenW * h;
-        double ci = -1.0 * (h - screenH2) * zoom - centerY;
-        for (int w = 0; w < screenW; w++)
+        double ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
+
+        int w = 0;
+        do
         {
-          double cr = (w - screenW2) * zoom + centerX;
+          double cr = (w - screenW2) * state.zoom + state.centerX;
           double zr = 0, zi = 0;
           int n1 = 0;
-          double zrSquared, ziSquared;
-          while ((zrSquared = zr * zr) + (ziSquared = zi * zi) < 4 && n1 != limit)
+          double zrSquared = zr * zr, ziSquared = zi * zi;
+          do
           {
             double temp = 2 * zr * zi + ci;
             zr = zrSquared - ziSquared + cr;
             zi = temp;
+            zrSquared = zr * zr;
+            ziSquared = zi * zi;
             n1++;
-          }
+          } while (zrSquared + ziSquared < 4 && n1 != state.limit);
+
           field[w + screenWH] = n1;
-        }
-      }
-      process = false;
+          w++;
+        } while (w < screenW);
+        h++;
+      } while (h < screenH);
+
+      state.process = false;
     }
 
-    if (cycling)
+    if (state.cycling)
     {
-      cycle++;
+      state.cycle++;
     }
 
     console_init(xfb[buffer], 0, 20, rmode->fbWidth, 20, fbStride);
-    printf(" cX:%.8f cY:%.8f", centerX, -centerY);
-    printf("  zoom:%.4e ", INITIAL_ZOOM / zoom);
+    printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
+    printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
 
-    for (int h = 20; h < screenH; h++)
+    int h = 20;
+    do
     {
       int screenWHHalf = (screenW * h) >> 1;
-      for (int w = 0; w < screenW; w++)
+      int w = 0;
+      do
       {
-        int n1 = field[w + screenW * h] + cycle;
-        xfb[buffer][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, limit, paletteIndex);
-      }
-    }
+        int n1 = field[w + screenW * h] + state.cycle;
+        xfb[buffer][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
+        w++;
+      } while (w < screenW);
+      h++;
+    } while (h < screenH);
 
     WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
     res = WPAD_Probe(0, &type);
+
     if (res == WPAD_ERR_NONE)
     {
       wd = WPAD_Data(0);
+
       if (wd->ir.valid)
       {
-        printf(" re:%.8f im:%.8f", (wd->ir.x - screenW2) * zoom + centerX, (screenH2 - wd->ir.y) * zoom - centerY);
+        printf(" re:%.8f im:%.8f",
+          (wd->ir.x - screenW2) * state.zoom + state.centerX,
+          (screenH2 - wd->ir.y) * state.zoom - state.centerY);
         drawdot(xfb[buffer], rmode, (u16)wd->ir.x, (u16)wd->ir.y, COLOR_RED);
       }
       else
@@ -205,38 +248,45 @@ int main(int argc, char **argv)
 
       if (wd->btns_d & WPAD_BUTTON_A)
       {
-        mouseX = wd->ir.x;
-        mouseY = wd->ir.y;
-        zooming();
+        state.mouseX = wd->ir.x;
+        state.mouseY = wd->ir.y;
+        zoomView(&state, screenW2, screenH2);
       }
+
       if (wd->btns_d & WPAD_BUTTON_B)
       {
-        zoom = INITIAL_ZOOM;
-        centerX = centerY = oldX = oldY = 0;
-        process = true;
+        state.zoom = INITIAL_ZOOM;
+        state.centerX = state.centerY = state.oldX = state.oldY = 0;
+        state.process = true;
       }
+
       if (wd->btns_d & WPAD_BUTTON_DOWN)
       {
-        cycling = !cycling;
+        state.cycling = !state.cycling;
       }
+
       if (wd->btns_d & WPAD_BUTTON_2)
       {
-        limit = (limit > 1) ? (limit >> 1) : 1;
-        process = true;
+        state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
+        state.process = true;
       }
+
       if (wd->btns_d & WPAD_BUTTON_1)
       {
-        limit = (limit < LIMIT_MAX) ? (limit << 1) : LIMIT_MAX;
-        process = true;
+        state.limit = (state.limit < LIMIT_MAX) ? (state.limit << 1) : LIMIT_MAX;
+        state.process = true;
       }
+
       if (wd->btns_d & WPAD_BUTTON_MINUS)
       {
-        paletteIndex = (paletteIndex > 0) ? (paletteIndex - 1) : 9;
+        state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : 9;
       }
+
       if (wd->btns_d & WPAD_BUTTON_PLUS)
       {
-        paletteIndex = (paletteIndex + 1) % 10;
+        state.paletteIndex = (state.paletteIndex + 1) % 10;
       }
+
       if ((wd->btns_d & WPAD_BUTTON_HOME) || reboot)
       {
         shutdown_system();
@@ -248,12 +298,14 @@ int main(int argc, char **argv)
     VIDEO_SetNextFramebuffer(xfb[buffer]);
     VIDEO_Flush();
     VIDEO_WaitVSync();
+
     if (switchoff)
     {
       shutdown_system();
       SYS_ResetSystem(SYS_POWEROFF, 0, false);
     }
   }
+
   return 0;
 }
 
@@ -281,6 +333,7 @@ u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex)
 
   cb = (cb1 + cb2) >> 1;
   crx = (cr1 + cr2) >> 1;
+
   return (y1 << 24) | (cb << 16) | (y2 << 8) | crx;
 }
 
@@ -309,6 +362,7 @@ static void init()
   VIDEO_Configure(rmode);
   xfb[0] = (u32 *)MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
   xfb[1] = (u32 *)MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
+
   console_init(xfb[0], 0, 20, rmode->fbWidth, rmode->xfbHeight, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
   VIDEO_ClearFrameBuffer(rmode, xfb[0], COLOR_BLACK);
   VIDEO_ClearFrameBuffer(rmode, xfb[1], COLOR_BLACK);
@@ -316,10 +370,12 @@ static void init()
   VIDEO_SetBlack(0);
   VIDEO_Flush();
   VIDEO_WaitVSync();
+
   if (rmode->viTVMode & VI_NON_INTERLACE)
   {
     VIDEO_WaitVSync();
   }
+
   WPAD_SetDataFormat(0, WPAD_FMT_BTNS_ACC_IR);
   WPAD_SetVRes(0, rmode->fbWidth, rmode->xfbHeight);
 }
