@@ -164,11 +164,11 @@ int main(int argc, char **argv)
 
   MandelbrotState state;
   initMandelbrotState(&state);
-  int buffer = 0;
+  bool bufferIndex = 0;
 
   while (true)
   {
-    buffer = !buffer;
+    bufferIndex = !bufferIndex;
 
     if (state.process)
     {
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
       state.cycle++;
     }
 
-    console_init(xfb[buffer], 0, 20, rmode->fbWidth, 20, fbStride);
+    console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
     printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
     printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
 
@@ -221,7 +221,7 @@ int main(int argc, char **argv)
       do
       {
         int n1 = field[w + screenW * h] + state.cycle;
-        xfb[buffer][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
+        xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
         w++;
       } while (w < screenW);
       h++;
@@ -239,7 +239,7 @@ int main(int argc, char **argv)
         printf(" re:%.8f im:%.8f",
           (wd->ir.x - screenW2) * state.zoom + state.centerX,
           (screenH2 - wd->ir.y) * state.zoom - state.centerY);
-        drawdot(xfb[buffer], rmode, (u16)wd->ir.x, (u16)wd->ir.y, COLOR_RED);
+        drawdot(xfb[bufferIndex], rmode, (u16)wd->ir.x, (u16)wd->ir.y, COLOR_RED);
       }
       else
       {
@@ -295,7 +295,7 @@ int main(int argc, char **argv)
       }
     }
 
-    VIDEO_SetNextFramebuffer(xfb[buffer]);
+    VIDEO_SetNextFramebuffer(xfb[bufferIndex]);
     VIDEO_Flush();
     VIDEO_WaitVSync();
 
