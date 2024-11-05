@@ -151,14 +151,17 @@ int main(int argc, char **argv)
   init();
   atexit(cleanup_field);
 
+  double cr, ci, zr, zi, zrSquared, ziSquared;
+  int n1, w, h, screenWH, screenWHHalf;
   int res;
   u32 type;
   WPADData *wd;
-  const int screenW = rmode->fbWidth;
-  const int screenH = rmode->xfbHeight;
-  const int fbStride = rmode->fbWidth * VI_DISPLAY_PIX_SZ;
 
-  field = (int *)memalign(32, sizeof(int) * screenW * screenH);
+  const int screenW = (rmode->fbWidth + 31) & ~31;
+  const int screenH = rmode->xfbHeight;
+  const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
+
+  field = (int *)memalign(32, ((sizeof(int) * screenW * screenH + 31) & ~31));
   const int screenW2 = screenW >> 1;
   const int screenH2 = screenH >> 1;
 
@@ -172,24 +175,25 @@ int main(int argc, char **argv)
 
     if (state.process)
     {
-      int h = 20;
+      h = 20;
       do
       {
-        int screenWH = screenW * h;
-        double ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
+        screenWH = screenW * h;
+        ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
 
-        int w = 0;
+        w = 0;
         do
         {
-          double cr = (w - screenW2) * state.zoom + state.centerX;
-          double zr = 0, zi = 0;
-          int n1 = 0;
-          double zrSquared = zr * zr, ziSquared = zi * zi;
+          cr = (w - screenW2) * state.zoom + state.centerX;
+          zr = zi = 0;
+          n1 = 0;
+          zrSquared = zr * zr;
+          ziSquared = zi * zi;
+
           do
           {
-            double temp = 2 * zr * zi + ci;
+            zi = 2 * zr * zi + ci;
             zr = zrSquared - ziSquared + cr;
-            zi = temp;
             zrSquared = zr * zr;
             ziSquared = zi * zi;
             ++n1;
@@ -213,14 +217,14 @@ int main(int argc, char **argv)
     printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
     printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
 
-    int h = 20;
+    h = 20;
     do
     {
-      int screenWHHalf = (screenW * h) >> 1;
-      int w = 0;
+      screenWHHalf = (screenW * h) >> 1;
+      w = 0;
       do
       {
-        int n1 = field[w + screenW * h] + state.cycle;
+        n1 = field[w + screenW * h] + state.cycle;
         xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
         ++w;
       } while (w < screenW);
