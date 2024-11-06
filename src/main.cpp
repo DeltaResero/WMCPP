@@ -220,7 +220,6 @@ int main(int argc, char** argv)
 
   double cr, ci, zr, zi, zrSquared, ziSquared;
   int n1, w, h, screenWH, screenWHHalf;
-  int res;
   u32 type;
   WPADData* wd;
 
@@ -294,9 +293,8 @@ int main(int argc, char** argv)
     } while (++h < screenH);
 
     WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
-    res = WPAD_Probe(0, &type);
 
-    if (res == WPAD_ERR_NONE)
+    if (WPAD_Probe(0, &type) == WPAD_ERR_NONE)
     {
       wd = WPAD_Data(0);
 
