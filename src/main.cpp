@@ -101,21 +101,19 @@ static inline void drawdot(void* xfb, GXRModeObj* rmode, u16 fx, u16 fy, u32 col
   const int fbWidthHalf = rmode->fbWidth >> 1;
   const int x = fx >> 1;
   const int y = fy;
-  const int y_start = (y - 4 >= 0) ? y - 4 : 0;
-  const int y_end = (y + 4 < rmode->xfbHeight) ? y + 4 : rmode->xfbHeight - 1;
-  const int x_start = (x - 2 >= 0) ? x - 2 : 0;
   const int x_end = (x + 2 < fbWidthHalf) ? x + 2 : fbWidthHalf - 1;
+  const int y_end = (y + 4 < rmode->xfbHeight) ? y + 4 : rmode->xfbHeight - 1;
 
-  int py = y_start;
+  int y_start = (y - 4 >= 0) ? y - 4 : 0;
   do
   {
-    u32 fbOffset = fbWidthHalf * py;
-    int px = x_start;
+    u32 fbOffset = fbWidthHalf * y_start;
+    int x_start = (x - 2 >= 0) ? x - 2 : 0;
     do
     {
-      fb[fbOffset + px] = color;
-    } while (++px <= x_end);
-  } while (++py <= y_end);
+      fb[fbOffset + x_start] = color;
+    } while (++x_start <= x_end);
+  } while (++y_start <= y_end);
 }
 
 static void countevs(int chan, const WPADData* data)
