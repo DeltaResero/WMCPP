@@ -34,6 +34,7 @@ PORTLIBS     :=  $(DEVKITPRO)/portlibs/wii
 #---------------------------------------------------------------------------------
 
 CC = $(DEVKITPPC)/bin/powerpc-eabi-gcc
+CXX = $(DEVKITPPC)/bin/powerpc-eabi-g++
 STRIP = $(DEVKITPPC)/bin/powerpc-eabi-strip
 
 #---------------------------------------------------------------------------------

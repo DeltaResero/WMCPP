@@ -1,20 +1,31 @@
-// main.c
+// main.cpp
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <malloc.h>
 #include <ogcsys.h>
 #include <gccore.h>
 #include <wiiuse/wpad.h>
-#include "palettes.h"
+#include "palettes.hpp"
 
-const double INITIAL_ZOOM = 0.007;
-const int INITIAL_LIMIT = 200;
-const int LIMIT_MAX = 3200;
-const double MAX_ZOOM_PRECISION = 1e-14;
+static constexpr double INITIAL_ZOOM = 0.007;
+static constexpr int INITIAL_LIMIT = 200;
+static constexpr int LIMIT_MAX = 3200;
+static constexpr double MAX_ZOOM_PRECISION = 1e-14;
 
-typedef struct
+static u32* xfb[2] = {nullptr, nullptr};
+static GXRModeObj* rmode;
+static int evctr = 0;
+static bool reboot = false;
+static bool switchoff = false;
+static int* field = nullptr;
+
+void reset(u32, void*);
+void poweroff();
+
+class MandelbrotState
 {
+public:
   double centerX;
   double centerY;
   double oldX;
@@ -27,15 +38,45 @@ typedef struct
   bool process;
   bool cycling;
   int cycle;
-} MandelbrotState;
 
-static u32 *xfb[2] = { NULL, NULL };
-static GXRModeObj *rmode;
-int evctr = 0;
-bool reboot = false, switchoff = false;
-int *field = NULL;
+  MandelbrotState()
+  {
+    centerX = 0;
+    centerY = 0;
+    oldX = 0;
+    oldY = 0;
+    mouseX = 0;
+    mouseY = 0;
+    limit = INITIAL_LIMIT;
+    paletteIndex = 4;
+    zoom = INITIAL_ZOOM;
+    process = true;
+    cycling = false;
+    cycle = 0;
+  }
 
-void reset()
+  inline void moveView(int screenW2, int screenH2)
+  {
+    centerX = mouseX * zoom - screenW2 * zoom + oldX;
+    oldX = centerX;
+    centerY = mouseY * zoom - screenH2 * zoom + oldY;
+    oldY = centerY;
+    process = true;
+  }
+
+  inline void zoomView(int screenW2, int screenH2)
+  {
+    moveView(screenW2, screenH2);
+    zoom *= 0.35;
+    if (zoom < MAX_ZOOM_PRECISION)
+    {
+      zoom = MAX_ZOOM_PRECISION;
+    }
+    process = true;
+  }
+};
+
+void reset(u32 resetCode, void* resetData)
 {
   reboot = true;
 }
@@ -43,45 +84,6 @@ void reset()
 void poweroff()
 {
   switchoff = true;
-}
-
-static void init();
-u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex);
-
-void initMandelbrotState(MandelbrotState *state)
-{
-  state->centerX = 0;
-  state->centerY = 0;
-  state->oldX = 0;
-  state->oldY = 0;
-  state->mouseX = 0;
-  state->mouseY = 0;
-  state->limit = INITIAL_LIMIT;
-  state->paletteIndex = 4;
-  state->zoom = INITIAL_ZOOM;
-  state->process = true;
-  state->cycling = false;
-  state->cycle = 0;
-}
-
-void moveView(MandelbrotState *state, int screenW2, int screenH2)
-{
-  state->centerX = state->mouseX * state->zoom - screenW2 * state->zoom + state->oldX;
-  state->oldX = state->centerX;
-  state->centerY = state->mouseY * state->zoom - screenH2 * state->zoom + state->oldY;
-  state->oldY = state->centerY;
-  state->process = true;
-}
-
-void zoomView(MandelbrotState *state, int screenW2, int screenH2)
-{
-  moveView(state, screenW2, screenH2);
-  state->zoom *= 0.35;
-  if (state->zoom < MAX_ZOOM_PRECISION)
-  {
-    state->zoom = MAX_ZOOM_PRECISION;
-  }
-  state->process = true;
 }
 
 static inline u32 fast_reciprocal(u32 a)
@@ -93,14 +95,12 @@ static inline u32 fast_reciprocal(u32 a)
   return x;
 }
 
-static inline void drawdot(void *xfb, GXRModeObj *rmode, u16 fx, u16 fy, u32 color)
+static inline void drawdot(void* xfb, GXRModeObj* rmode, u16 fx, u16 fy, u32 color)
 {
-  u32 *fb = (u32 *)xfb;
-  const u32 fbWidthHalf = rmode->fbWidth >> 1;
-  const u32 fbStride = fbWidthHalf;  // Since VI_DISPLAY_PIX_SZ is 2
+  u32* fb = (u32*)xfb;
+  const int fbWidthHalf = rmode->fbWidth >> 1;
   const int x = fx >> 1;
   const int y = fy;
-
   const int y_start = (y - 4 >= 0) ? y - 4 : 0;
   const int y_end = (y + 4 < rmode->xfbHeight) ? y + 4 : rmode->xfbHeight - 1;
   const int x_start = (x - 2 >= 0) ? x - 2 : 0;
@@ -109,211 +109,42 @@ static inline void drawdot(void *xfb, GXRModeObj *rmode, u16 fx, u16 fy, u32 col
   int py = y_start;
   do
   {
-    u32 fbOffset = fbStride * py;
+    u32 fbOffset = fbWidthHalf * py;
     int px = x_start;
     do
     {
       fb[fbOffset + px] = color;
-      ++px;
-    } while (px <= x_end);
-    ++py;
-  } while (py <= y_end);
+    } while (++px <= x_end);
+  } while (++py <= y_end);
 }
 
-void countevs(int chan, const WPADData *data)
+static void countevs(int chan, const WPADData* data)
 {
   ++evctr;
 }
 
-void cleanup_field()
+static void cleanup_field()
 {
   free(field);
-  field = NULL;
+  field = nullptr;
 }
 
-void shutdown_system()
+static void shutdown_system()
 {
   cleanup_field();
   if (xfb[0])
   {
     free(MEM_K1_TO_K0(xfb[0]));
-    xfb[0] = NULL;
+    xfb[0] = nullptr;
   }
   if (xfb[1])
   {
     free(MEM_K1_TO_K0(xfb[1]));
-    xfb[1] = NULL;
+    xfb[1] = nullptr;
   }
 }
 
-int main(int argc, char **argv)
-{
-  init();
-  atexit(cleanup_field);
-
-  double cr, ci, zr, zi, zrSquared, ziSquared;
-  int n1, w, h, screenWH, screenWHHalf;
-  int res;
-  u32 type;
-  WPADData *wd;
-
-  const int screenW = (rmode->fbWidth + 31) & ~31;
-  const int screenH = rmode->xfbHeight;
-  const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
-
-  field = (int *)memalign(32, ((sizeof(int) * screenW * screenH + 31) & ~31));
-  const int screenW2 = screenW >> 1;
-  const int screenH2 = screenH >> 1;
-
-  MandelbrotState state;
-  initMandelbrotState(&state);
-  bool bufferIndex = 0;
-
-  while (true)
-  {
-    bufferIndex = !bufferIndex;
-
-    if (state.process)
-    {
-      h = 20;
-      do
-      {
-        screenWH = screenW * h;
-        ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
-
-        w = 0;
-        do
-        {
-          cr = (w - screenW2) * state.zoom + state.centerX;
-          zr = zi = 0;
-          n1 = 0;
-          zrSquared = zr * zr;
-          ziSquared = zi * zi;
-
-          do
-          {
-            zi = 2 * zr * zi + ci;
-            zr = zrSquared - ziSquared + cr;
-            zrSquared = zr * zr;
-            ziSquared = zi * zi;
-            ++n1;
-          } while (zrSquared + ziSquared < 4 && n1 != state.limit);
-
-          field[w + screenWH] = n1;
-          ++w;
-        } while (w < screenW);
-        ++h;
-      } while (h < screenH);
-
-      state.process = false;
-    }
-
-    if (state.cycling)
-    {
-      ++state.cycle;
-    }
-
-    console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
-    printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
-    printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
-
-    h = 20;
-    do
-    {
-      screenWHHalf = (screenW * h) >> 1;
-      w = 0;
-      do
-      {
-        n1 = field[w + screenW * h] + state.cycle;
-        xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
-        ++w;
-      } while (w < screenW);
-      ++h;
-    } while (h < screenH);
-
-    WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
-    res = WPAD_Probe(0, &type);
-
-    if (res == WPAD_ERR_NONE)
-    {
-      wd = WPAD_Data(0);
-
-      if (wd->ir.valid)
-      {
-        printf(" re:%.8f im:%.8f",
-          (wd->ir.x - screenW2) * state.zoom + state.centerX,
-          (screenH2 - wd->ir.y) * state.zoom - state.centerY);
-        drawdot(xfb[bufferIndex], rmode, (u16)wd->ir.x, (u16)wd->ir.y, COLOR_RED);
-      }
-      else
-      {
-        printf(" No Cursor");
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_A)
-      {
-        state.mouseX = wd->ir.x;
-        state.mouseY = wd->ir.y;
-        zoomView(&state, screenW2, screenH2);
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_B)
-      {
-        state.zoom = INITIAL_ZOOM;
-        state.centerX = state.centerY = state.oldX = state.oldY = 0;
-        state.process = true;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_DOWN)
-      {
-        state.cycling = !state.cycling;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_2)
-      {
-        state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
-        state.process = true;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_1)
-      {
-        state.limit = (state.limit < LIMIT_MAX) ? (state.limit << 1) : LIMIT_MAX;
-        state.process = true;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_MINUS)
-      {
-        state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : 9;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_PLUS)
-      {
-        state.paletteIndex = (state.paletteIndex + 1) % 10;
-      }
-
-      if ((wd->btns_d & WPAD_BUTTON_HOME) || reboot)
-      {
-        shutdown_system();
-        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
-        exit(0);
-      }
-    }
-
-    VIDEO_SetNextFramebuffer(xfb[bufferIndex]);
-    VIDEO_Flush();
-    VIDEO_WaitVSync();
-
-    if (switchoff)
-    {
-      shutdown_system();
-      SYS_ResetSystem(SYS_POWEROFF, 0, false);
-    }
-  }
-
-  return 0;
-}
-
-u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex)
+static u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex)
 {
   int y1, cb1, cr1, y2, cb2, cr2, cb, crx;
 
@@ -364,8 +195,8 @@ static void init()
   }
 
   VIDEO_Configure(rmode);
-  xfb[0] = (u32 *)MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
-  xfb[1] = (u32 *)MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
+  xfb[0] = static_cast<u32*>(MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode)));
+  xfb[1] = static_cast<u32*>(MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode)));
 
   console_init(xfb[0], 0, 20, rmode->fbWidth, rmode->xfbHeight, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
   VIDEO_ClearFrameBuffer(rmode, xfb[0], COLOR_BLACK);
@@ -382,6 +213,168 @@ static void init()
 
   WPAD_SetDataFormat(0, WPAD_FMT_BTNS_ACC_IR);
   WPAD_SetVRes(0, rmode->fbWidth, rmode->xfbHeight);
+}
+
+int main(int argc, char** argv)
+{
+  init();
+  std::atexit(cleanup_field);
+
+  double cr, ci, zr, zi, zrSquared, ziSquared;
+  int n1, w, h, screenWH, screenWHHalf;
+  int res;
+  u32 type;
+  WPADData* wd;
+
+  const int screenW = (rmode->fbWidth + 31) & ~31;
+  const int screenH = rmode->xfbHeight;
+  const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
+
+  field = static_cast<int*>(memalign(32, ((sizeof(int) * screenW * screenH + 31) & ~31)));
+  const int screenW2 = screenW >> 1;
+  const int screenH2 = screenH >> 1;
+
+  MandelbrotState state;
+  bool bufferIndex = 0;
+
+  do
+  {
+    bufferIndex = !bufferIndex;
+
+    if (state.process)
+    {
+      h = 20;
+      do
+      {
+        screenWH = screenW * h;
+        ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
+
+        w = 0;
+        do
+        {
+          cr = (w - screenW2) * state.zoom + state.centerX;
+          zr = zi = 0;
+          n1 = 0;
+          zrSquared = zr * zr;
+          ziSquared = zi * zi;
+
+          do
+          {
+            zi = 2 * zr * zi + ci;
+            zr = zrSquared - ziSquared + cr;
+            zrSquared = zr * zr;
+            ziSquared = zi * zi;
+            ++n1;
+          } while (zrSquared + ziSquared < 4 && n1 != state.limit);
+
+          field[w + screenWH] = n1;
+        } while (++w < screenW);
+      } while (++h < screenH);
+
+      state.process = false;
+    }
+
+    if (state.cycling)
+    {
+      ++state.cycle;
+    }
+
+    console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
+    printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
+    printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
+
+    h = 20;
+    do
+    {
+      screenWHHalf = (screenW * h) >> 1;
+      w = 0;
+      do
+      {
+        n1 = field[w + screenW * h] + state.cycle;
+        xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
+      } while (++w < screenW);
+    } while (++h < screenH);
+
+    WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
+    res = WPAD_Probe(0, &type);
+
+    if (res == WPAD_ERR_NONE)
+    {
+      wd = WPAD_Data(0);
+
+      if (wd->ir.valid)
+      {
+        printf(" re:%.8f im:%.8f",
+          (wd->ir.x - screenW2) * state.zoom + state.centerX,
+          (screenH2 - wd->ir.y) * state.zoom - state.centerY);
+        drawdot(xfb[bufferIndex], rmode, static_cast<u16>(wd->ir.x), static_cast<u16>(wd->ir.y), COLOR_RED);
+      }
+      else
+      {
+        printf(" No Cursor");
+      }
+
+      if (wd->btns_d & WPAD_BUTTON_A)
+      {
+        state.mouseX = wd->ir.x;
+        state.mouseY = wd->ir.y;
+        state.zoomView(screenW2, screenH2);
+      }
+
+      if (wd->btns_d & WPAD_BUTTON_B)
+      {
+        state.zoom = INITIAL_ZOOM;
+        state.centerX = state.centerY = state.oldX = state.oldY = 0;
+        state.process = true;
+      }
+
+      if (wd->btns_d & WPAD_BUTTON_DOWN)
+      {
+        state.cycling = !state.cycling;
+      }
+
+      if (wd->btns_d & WPAD_BUTTON_2)
+      {
+        state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
+        state.process = true;
+      }
+
+      if (wd->btns_d & WPAD_BUTTON_1)
+      {
+        state.limit = (state.limit < LIMIT_MAX) ? (state.limit << 1) : LIMIT_MAX;
+        state.process = true;
+      }
+
+      if (wd->btns_d & WPAD_BUTTON_MINUS)
+      {
+        state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : 9;
+      }
+
+      if (wd->btns_d & WPAD_BUTTON_PLUS)
+      {
+        state.paletteIndex = (state.paletteIndex + 1) % 10;
+      }
+
+      if ((wd->btns_d & WPAD_BUTTON_HOME) || reboot)
+      {
+        shutdown_system();
+        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+        return 0;
+      }
+    }
+
+    VIDEO_SetNextFramebuffer(xfb[bufferIndex]);
+    VIDEO_Flush();
+    VIDEO_WaitVSync();
+
+    if (switchoff)
+    {
+      shutdown_system();
+      SYS_ResetSystem(SYS_POWEROFF, 0, false);
+    }
+  } while (true);
+
+  return 0;
 }
 
 // EOF
