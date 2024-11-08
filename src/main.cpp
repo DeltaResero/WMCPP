@@ -276,26 +276,39 @@ int main(int argc, char** argv)
         if (state.process)
         {
           cr = (w - screenW2) * state.zoom + state.centerX;
-          zr = zi = 0;
-          n1 = 0;
-          zrSquared = zr * zr;
-          ziSquared = zi * zi;
 
-          do
+          double q = (cr - 0.25)*(cr - 0.25) + ci*ci;
+          if (q*(q + (cr - 0.25)) <= 0.25*ci*ci)
           {
-            zi = 2 * zr * zi + ci;
-            zr = zrSquared - ziSquared + cr;
-            zrSquared = zr * zr;
-            ziSquared = zi * zi;
-            ++n1;
-          } while (zrSquared + ziSquared < 4 && n1 != state.limit);
-
+            n1 = state.limit;
+          }
+          else
+          {
+            double p = (cr + 1.0)*(cr + 1.0) + ci*ci;
+            if (p <= 0.0625)
+            {
+              n1 = state.limit;
+            }
+            else
+            {
+              zr = zi = 0;
+              n1 = 0;
+              zrSquared = zr * zr;
+              ziSquared = zi * zi;
+              do
+              {
+                zi = 2 * zr * zi + ci;
+                zr = zrSquared - ziSquared + cr;
+                zrSquared = zr * zr;
+                ziSquared = zi * zi;
+                ++n1;
+              } while (zrSquared + ziSquared < 4 && n1 != state.limit);
+            }
+          }
           field[w + screenWH] = n1;
         }
-
         n1 = field[w + screenW * h] + state.cycle;
         xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
-
       } while (++w < screenW);
     } while (++h < screenH);
 
@@ -303,6 +316,7 @@ int main(int argc, char** argv)
     {
       state.process = false;
     }
+
     if (state.cycling)
     {
       ++state.cycle;
@@ -332,41 +346,47 @@ int main(int argc, char** argv)
         state.debugMode = !state.debugMode;
       }
 
-
       if (wd->btns_d & WPAD_BUTTON_A)
       {
         state.mouseX = wd->ir.x;
         state.mouseY = wd->ir.y;
         state.zoomView(screenW2, screenH2);
       }
+
       if (wd->btns_d & WPAD_BUTTON_B)
       {
         state.zoom = INITIAL_ZOOM;
         state.centerX = state.centerY = state.oldX = state.oldY = 0;
         state.process = true;
       }
+
       if (wd->btns_d & WPAD_BUTTON_DOWN)
       {
         state.cycling = !state.cycling;
       }
+
       if (wd->btns_d & WPAD_BUTTON_2)
       {
         state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
         state.process = true;
       }
+
       if (wd->btns_d & WPAD_BUTTON_1)
       {
         state.limit = (state.limit < LIMIT_MAX) ? (state.limit << 1) : LIMIT_MAX;
         state.process = true;
       }
+
       if (wd->btns_d & WPAD_BUTTON_MINUS)
       {
         state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : 9;
       }
+
       if (wd->btns_d & WPAD_BUTTON_PLUS)
       {
         state.paletteIndex = (state.paletteIndex + 1) % 10;
       }
+
       if ((wd->btns_d & WPAD_BUTTON_HOME) || reboot)
       {
         shutdown_system();
