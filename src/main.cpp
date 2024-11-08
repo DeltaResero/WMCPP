@@ -6,19 +6,20 @@
 #include <ogcsys.h>
 #include <gccore.h>
 #include <wiiuse/wpad.h>
+#include <ogc/lwp_watchdog.h>
 #include "palettes.hpp"
 
 static constexpr double INITIAL_ZOOM = 0.007;
 static constexpr int INITIAL_LIMIT = 200;
 static constexpr int LIMIT_MAX = 3200;
 static constexpr double MAX_ZOOM_PRECISION = 1e-14;
-
 static u32* xfb[2] = {nullptr, nullptr};
 static GXRModeObj* rmode;
 static int evctr = 0;
 static bool reboot = false;
 static bool switchoff = false;
 static int* field = nullptr;
+static u64 lastTime = 0;
 
 void reset(u32, void*);
 void poweroff();
@@ -38,6 +39,7 @@ public:
   bool process;
   bool cycling;
   int cycle;
+  bool debugMode;
 
   MandelbrotState()
   {
@@ -53,6 +55,7 @@ public:
     process = true;
     cycling = false;
     cycle = 0;
+    debugMode = false;
   }
 
   inline void moveView(int screenW2, int screenH2)
@@ -217,6 +220,7 @@ int main(int argc, char** argv)
 {
   init();
   std::atexit(cleanup_field);
+  lastTime = gettime();
 
   double cr, ci, zr, zi, zrSquared, ziSquared;
   int n1, w, h, screenWH, screenWHHalf;
@@ -237,8 +241,23 @@ int main(int argc, char** argv)
   {
     bufferIndex = !bufferIndex;
     console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
-    printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
-    printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
+
+    if (state.debugMode)
+    {
+      u64 currentTime = gettime();
+      u32 frameTime = (u32)((currentTime - lastTime) * 1000 / TB_TIMER_CLOCK);
+      lastTime = currentTime;
+
+      struct mallinfo mi = mallinfo();
+      float memused = mi.uordblks / (1024.0f * 1024.0f);
+
+      printf(" Frame Time:%d Mem: %.1fMB Iter: %d", frameTime, memused, state.limit);
+    }
+    else
+    {
+      printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
+      printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
+    }
 
     h = 20;
     do
@@ -295,15 +314,24 @@ int main(int argc, char** argv)
       wd = WPAD_Data(0);
       if (wd->ir.valid)
       {
-        printf(" re:%.8f im:%.8f",
-          (wd->ir.x - screenW2) * state.zoom + state.centerX,
-          (screenH2 - wd->ir.y) * state.zoom - state.centerY);
+        if (!state.debugMode)
+        {
+          printf(" re:%.8f im:%.8f",
+            (wd->ir.x - screenW2) * state.zoom + state.centerX,
+            (screenH2 - wd->ir.y) * state.zoom - state.centerY);
+        }
         drawdot(xfb[bufferIndex], rmode, static_cast<u16>(wd->ir.x), static_cast<u16>(wd->ir.y), COLOR_RED);
       }
-      else
+      else if (!state.debugMode)
       {
         printf(" No Cursor");
       }
+
+      if ((wd->btns_d & WPAD_BUTTON_MINUS) && (wd->btns_d & WPAD_BUTTON_PLUS))
+      {
+        state.debugMode = !state.debugMode;
+      }
+
 
       if (wd->btns_d & WPAD_BUTTON_A)
       {
