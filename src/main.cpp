@@ -226,7 +226,6 @@ int main(int argc, char** argv)
   const int screenW = (rmode->fbWidth + 31) & ~31;
   const int screenH = rmode->xfbHeight;
   const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
-
   field = static_cast<int*>(memalign(32, ((sizeof(int) * screenW * screenH + 31) & ~31)));
   const int screenW2 = screenW >> 1;
   const int screenH2 = screenH >> 1;
@@ -237,17 +236,25 @@ int main(int argc, char** argv)
   do
   {
     bufferIndex = !bufferIndex;
+    console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
+    printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
+    printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
 
-    if (state.process)
+    h = 20;
+    do
     {
-      h = 20;
+      screenWH = screenW * h;
+      screenWHHalf = (screenW * h) >> 1;
+
+      if (state.process)
+      {
+        ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
+      }
+
+      w = 0;
       do
       {
-        screenWH = screenW * h;
-        ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
-
-        w = 0;
-        do
+        if (state.process)
         {
           cr = (w - screenW2) * state.zoom + state.centerX;
           zr = zi = 0;
@@ -265,39 +272,27 @@ int main(int argc, char** argv)
           } while (zrSquared + ziSquared < 4 && n1 != state.limit);
 
           field[w + screenWH] = n1;
-        } while (++w < screenW);
-      } while (++h < screenH);
+        }
 
+        n1 = field[w + screenW * h] + state.cycle;
+        xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
+
+      } while (++w < screenW);
+    } while (++h < screenH);
+
+    if (state.process)
+    {
       state.process = false;
     }
-
     if (state.cycling)
     {
       ++state.cycle;
     }
 
-    console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
-    printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
-    printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
-
-    h = 20;
-    do
-    {
-      screenWHHalf = (screenW * h) >> 1;
-      w = 0;
-      do
-      {
-        n1 = field[w + screenW * h] + state.cycle;
-        xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
-      } while (++w < screenW);
-    } while (++h < screenH);
-
     WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
-
     if (WPAD_Probe(0, &type) == WPAD_ERR_NONE)
     {
       wd = WPAD_Data(0);
-
       if (wd->ir.valid)
       {
         printf(" re:%.8f im:%.8f",
@@ -316,41 +311,34 @@ int main(int argc, char** argv)
         state.mouseY = wd->ir.y;
         state.zoomView(screenW2, screenH2);
       }
-
       if (wd->btns_d & WPAD_BUTTON_B)
       {
         state.zoom = INITIAL_ZOOM;
         state.centerX = state.centerY = state.oldX = state.oldY = 0;
         state.process = true;
       }
-
       if (wd->btns_d & WPAD_BUTTON_DOWN)
       {
         state.cycling = !state.cycling;
       }
-
       if (wd->btns_d & WPAD_BUTTON_2)
       {
         state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
         state.process = true;
       }
-
       if (wd->btns_d & WPAD_BUTTON_1)
       {
         state.limit = (state.limit < LIMIT_MAX) ? (state.limit << 1) : LIMIT_MAX;
         state.process = true;
       }
-
       if (wd->btns_d & WPAD_BUTTON_MINUS)
       {
         state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : 9;
       }
-
       if (wd->btns_d & WPAD_BUTTON_PLUS)
       {
         state.paletteIndex = (state.paletteIndex + 1) % 10;
       }
-
       if ((wd->btns_d & WPAD_BUTTON_HOME) || reboot)
       {
         shutdown_system();
