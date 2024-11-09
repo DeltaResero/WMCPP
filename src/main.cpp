@@ -13,6 +13,7 @@ static constexpr double INITIAL_ZOOM = 0.007;
 static constexpr int INITIAL_LIMIT = 200;
 static constexpr int LIMIT_MAX = 3200;
 static constexpr double MAX_ZOOM_PRECISION = 1e-14;
+static constexpr int MAX_PERIOD = 20;
 static u32* xfb[2] = {nullptr, nullptr};
 static GXRModeObj* rmode;
 static int evctr = 0;
@@ -40,6 +41,8 @@ public:
   bool cycling;
   int cycle;
   bool debugMode;
+  double* zrHistory;
+  double* ziHistory;
 
   MandelbrotState()
   {
@@ -56,6 +59,14 @@ public:
     cycling = false;
     cycle = 0;
     debugMode = false;
+    zrHistory = new double[MAX_PERIOD];
+    ziHistory = new double[MAX_PERIOD];
+  }
+
+  ~MandelbrotState()
+  {
+    delete[] zrHistory;
+    delete[] ziHistory;
   }
 
   inline void moveView(int screenW2, int screenH2)
@@ -264,19 +275,16 @@ int main(int argc, char** argv)
     {
       screenWH = screenW * h;
       screenWHHalf = (screenW * h) >> 1;
-
       if (state.process)
       {
         ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
       }
-
       w = 0;
       do
       {
         if (state.process)
         {
           cr = (w - screenW2) * state.zoom + state.centerX;
-
           double q = (cr - 0.25)*(cr - 0.25) + ci*ci;
           if (q*(q + (cr - 0.25)) <= 0.25*ci*ci)
           {
@@ -295,13 +303,36 @@ int main(int argc, char** argv)
               n1 = 0;
               zrSquared = zr * zr;
               ziSquared = zi * zi;
+              bool foundPeriod = false;
+
               do
               {
+                if (n1 < MAX_PERIOD)
+                {
+                  state.zrHistory[n1] = zr;
+                  state.ziHistory[n1] = zi;
+                }
+
                 zi = 2 * zr * zi + ci;
                 zr = zrSquared - ziSquared + cr;
                 zrSquared = zr * zr;
                 ziSquared = zi * zi;
                 ++n1;
+
+                if (n1 >= 2 && n1 < MAX_PERIOD)
+                {
+                  for (int p = 1; p <= n1/2; p++)
+                  {
+                    if (std::abs(zr - state.zrHistory[n1-p-1]) < 1e-10 &&
+                        std::abs(zi - state.ziHistory[n1-p-1]) < 1e-10)
+                    {
+                      n1 = state.limit;
+                      foundPeriod = true;
+                      break;
+                    }
+                  }
+                  if (foundPeriod) break;
+                }
               } while (zrSquared + ziSquared < 4 && n1 != state.limit);
             }
           }
