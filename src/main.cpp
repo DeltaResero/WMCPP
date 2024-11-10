@@ -13,7 +13,6 @@ static constexpr double INITIAL_ZOOM = 0.007;
 static constexpr int INITIAL_LIMIT = 200;
 static constexpr int LIMIT_MAX = 3200;
 static constexpr double MAX_ZOOM_PRECISION = 1e-14;
-static constexpr int MAX_PERIOD = 20;
 static u32* xfb[2] = {nullptr, nullptr};
 static GXRModeObj* rmode;
 static int evctr = 0;
@@ -41,8 +40,6 @@ public:
   bool cycling;
   int cycle;
   bool debugMode;
-  double* zrHistory;
-  double* ziHistory;
   double* cachedX;
   double* cachedY;
 
@@ -61,16 +58,12 @@ public:
     cycling = false;
     cycle = 0;
     debugMode = false;
-    zrHistory = new double[MAX_PERIOD];
-    ziHistory = new double[MAX_PERIOD];
     cachedX = new double[rmode->fbWidth];
     cachedY = new double[rmode->xfbHeight];
   }
 
   ~MandelbrotState()
   {
-    delete[] zrHistory;
-    delete[] ziHistory;
     delete[] cachedX;
     delete[] cachedY;
   }
@@ -334,37 +327,14 @@ int main(int argc, char** argv)
               n1 = 0;
               zrSquared = zr * zr;
               ziSquared = zi * zi;
-              bool foundPeriod = false;
 
               do
               {
-                if (n1 < MAX_PERIOD && (n1 & 3) == 0)
-                {
-                  state.zrHistory[n1 >> 2] = zr;
-                  state.ziHistory[n1 >> 2] = zi;
-                }
-
                 zi = 2 * zr * zi + ci;
                 zr = zrSquared - ziSquared + cr;
                 zrSquared = zr * zr;
                 ziSquared = zi * zi;
                 ++n1;
-
-                if (n1 >= 8 && (n1 & 7) == 0 && n1 < MAX_PERIOD)
-                {
-                  const int historyIndex = n1 >> 2;
-                  for (int p = 1; p <= 4; p++)
-                  {
-                    if (std::abs(zr - state.zrHistory[historyIndex-p]) < 1e-10 &&
-                        std::abs(zi - state.ziHistory[historyIndex-p]) < 1e-10)
-                    {
-                      n1 = state.limit;
-                      foundPeriod = true;
-                      break;
-                    }
-                  }
-                  if (foundPeriod) break;
-                }
               } while (zrSquared + ziSquared < 4 && n1 != state.limit);
             }
           }
