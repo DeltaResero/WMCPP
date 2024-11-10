@@ -156,9 +156,21 @@ static void shutdown_system()
   }
 }
 
-static u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex)
+/**
+ * Packs two adjacent pixels' YUV values into the Wii's native framebuffer format.
+ * The Wii uses an interleaved YUV format where two pixels share chrominance (U,V)
+ * values to save memory bandwidth. The resulting 32-bit value contains two Y
+ * (luminance) values with shared U and V components between adjacent pixels.
+ *
+ * @param n2 First pixel's iteration count
+ * @param n1 Second pixel's iteration count
+ * @param limit Maximum iteration count
+ * @param paletteIndex Current color palette index
+ * @return Packed 32-bit YUV value ready for framebuffer
+ */
+static u32 PackYUVPair(int n2, int n1, int limit, uint8_t paletteIndex)
 {
-  int y1, cb1, cr1, y2, cb2, cr2, cb, crx;
+  int y1, cb1, cr1, y2, cb2, cr2;
 
   if (n2 == limit)
   {
@@ -178,10 +190,7 @@ static u32 CvtYUV(int n2, int n1, int limit, uint8_t paletteIndex)
     Palette(paletteIndex, n1, &y2, &cb2, &cr2);
   }
 
-  cb = (cb1 + cb2) >> 1;
-  crx = (cr1 + cr2) >> 1;
-
-  return (y1 << 24) | (cb << 16) | (y2 << 8) | crx;
+  return (y1 << 24) | ((cb1 + cb2) >> 1 << 16) | (y2 << 8) | ((cr1 + cr2) >> 1);
 }
 
 static void init()
@@ -339,7 +348,7 @@ int main(int argc, char** argv)
           field[w + screenWH] = n1;
         }
         n1 = field[w + screenW * h] + state.cycle;
-        xfb[bufferIndex][(w >> 1) + screenWHHalf] = CvtYUV(n1, n1, state.limit, state.paletteIndex);
+        xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n1, state.limit, state.paletteIndex);
       } while (++w < screenW);
     } while (++h < screenH);
 
