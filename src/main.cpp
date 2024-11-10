@@ -338,10 +338,10 @@ int main(int argc, char** argv)
 
               do
               {
-                if (n1 < MAX_PERIOD)
+                if (n1 < MAX_PERIOD && (n1 & 3) == 0)
                 {
-                  state.zrHistory[n1] = zr;
-                  state.ziHistory[n1] = zi;
+                  state.zrHistory[n1 >> 2] = zr;
+                  state.ziHistory[n1 >> 2] = zi;
                 }
 
                 zi = 2 * zr * zi + ci;
@@ -350,12 +350,13 @@ int main(int argc, char** argv)
                 ziSquared = zi * zi;
                 ++n1;
 
-                if (n1 >= 2 && n1 < MAX_PERIOD)
+                if (n1 >= 8 && (n1 & 7) == 0 && n1 < MAX_PERIOD)
                 {
-                  for (int p = 1; p <= n1/2; p++)
+                  const int historyIndex = n1 >> 2;
+                  for (int p = 1; p <= 4; p++)
                   {
-                    if (std::abs(zr - state.zrHistory[n1-p-1]) < 1e-10 &&
-                        std::abs(zi - state.ziHistory[n1-p-1]) < 1e-10)
+                    if (std::abs(zr - state.zrHistory[historyIndex-p]) < 1e-10 &&
+                        std::abs(zi - state.ziHistory[historyIndex-p]) < 1e-10)
                     {
                       n1 = state.limit;
                       foundPeriod = true;
