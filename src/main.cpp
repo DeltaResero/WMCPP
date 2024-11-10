@@ -43,6 +43,8 @@ public:
   bool debugMode;
   double* zrHistory;
   double* ziHistory;
+  double* cachedX;
+  double* cachedY;
 
   MandelbrotState()
   {
@@ -61,12 +63,16 @@ public:
     debugMode = false;
     zrHistory = new double[MAX_PERIOD];
     ziHistory = new double[MAX_PERIOD];
+    cachedX = new double[rmode->fbWidth];
+    cachedY = new double[rmode->xfbHeight];
   }
 
   ~MandelbrotState()
   {
     delete[] zrHistory;
     delete[] ziHistory;
+    delete[] cachedX;
+    delete[] cachedY;
   }
 
   inline void moveView(int screenW2, int screenH2)
@@ -284,16 +290,32 @@ int main(int argc, char** argv)
     {
       screenWH = screenW * h;
       screenWHHalf = (screenW * h) >> 1;
+
       if (state.process)
       {
         ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
+        state.cachedY[h] = ci;
       }
+      else
+      {
+        ci = state.cachedY[h];
+      }
+
       w = 0;
       do
       {
         if (state.process)
         {
           cr = (w - screenW2) * state.zoom + state.centerX;
+          state.cachedX[w] = cr;
+        }
+        else
+        {
+          cr = state.cachedX[w];
+        }
+
+        if (state.process)
+        {
           double q = (cr - 0.25)*(cr - 0.25) + ci*ci;
           if (q*(q + (cr - 0.25)) <= 0.25*ci*ci)
           {
