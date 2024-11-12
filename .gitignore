@@ -36,6 +36,9 @@
 # Build Folder
 /build
 
+# VS Code Folder
+/.vscode
+
 # Archive
 *.zip
 
