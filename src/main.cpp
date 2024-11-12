@@ -9,16 +9,24 @@
 #include <ogc/lwp_watchdog.h>
 #include "palettes.hpp"
 
+// Aligned buffer sizes for DMA transfers
+#define ALIGN32(x) (((x) + 31) & ~31)
+
 static constexpr double INITIAL_ZOOM = 0.007;
 static constexpr int INITIAL_LIMIT = 200;
 static constexpr int LIMIT_MAX = 3200;
 static constexpr double MAX_ZOOM_PRECISION = 1e-14;
+
+// Pre-computed constants for cardioid/bulb check
+static constexpr double CARD_P1 = 0.25;
+static constexpr double CARD_P2 = 0.0625;
+
 static u32* xfb[2] = {nullptr, nullptr};
 static GXRModeObj* rmode;
 static int evctr = 0;
 static bool reboot = false;
 static bool switchoff = false;
-static int* field = nullptr;
+static int* __attribute__((aligned(32))) field = nullptr;
 static u64 lastTime = 0;
 
 void reset(u32, void*);
@@ -27,10 +35,12 @@ void poweroff();
 class MandelbrotState
 {
 public:
-  double centerX;
-  double centerY;
-  double oldX;
-  double oldY;
+  double* __attribute__((aligned(32))) cachedX;
+  double* __attribute__((aligned(32))) cachedY;
+  double __attribute__((aligned(32))) centerX;
+  double __attribute__((aligned(32))) centerY;
+  double __attribute__((aligned(32))) oldX;
+  double __attribute__((aligned(32))) oldY;
   int mouseX;
   int mouseY;
   int limit;
@@ -40,8 +50,6 @@ public:
   bool cycling;
   int cycle;
   bool debugMode;
-  double* cachedX;
-  double* cachedY;
 
   MandelbrotState()
   {
@@ -58,14 +66,15 @@ public:
     cycling = false;
     cycle = 0;
     debugMode = false;
-    cachedX = new double[rmode->fbWidth];
-    cachedY = new double[rmode->xfbHeight];
+    // Align arrays to 32-byte boundary for DMA
+    cachedX = static_cast<double*>(memalign(32, ALIGN32(sizeof(double) * rmode->fbWidth)));
+    cachedY = static_cast<double*>(memalign(32, ALIGN32(sizeof(double) * rmode->xfbHeight)));
   }
 
   ~MandelbrotState()
   {
-    delete[] cachedX;
-    delete[] cachedY;
+    free(cachedX);
+    free(cachedY);
   }
 
   inline void moveView(int screenW2, int screenH2)
@@ -88,6 +97,20 @@ public:
     process = true;
   }
 };
+
+// Helper function for cardioid/period-2 bulb check
+static inline bool isInMainCardioidOrBulb(double cr, double ci)
+{
+    double ci2 = ci * ci;
+    // Check cardioid
+    double q = (cr - CARD_P1) * (cr - CARD_P1) + ci2;
+    if (q * (q + (cr - CARD_P1)) <= CARD_P1 * ci2)
+    {
+        return true;
+    }
+    // Check period-2 bulb
+    return ((cr + 1.0) * (cr + 1.0) + ci2) <= CARD_P2;
+}
 
 void reset(u32 resetCode, void* resetData)
 {
@@ -249,7 +272,7 @@ int main(int argc, char** argv)
   const int screenW = (rmode->fbWidth + 31) & ~31;
   const int screenH = rmode->xfbHeight;
   const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
-  field = static_cast<int*>(memalign(32, ((sizeof(int) * screenW * screenH + 31) & ~31)));
+  field = static_cast<int*>(memalign(32, ALIGN32(sizeof(int) * screenW * screenH)));
   const int screenW2 = screenW >> 1;
   const int screenH2 = screenH >> 1;
 
@@ -309,34 +332,25 @@ int main(int argc, char** argv)
 
         if (state.process)
         {
-          double q = (cr - 0.25)*(cr - 0.25) + ci*ci;
-          if (q*(q + (cr - 0.25)) <= 0.25*ci*ci)
+          if (isInMainCardioidOrBulb(cr, ci))
           {
             n1 = state.limit;
           }
           else
           {
-            double p = (cr + 1.0)*(cr + 1.0) + ci*ci;
-            if (p <= 0.0625)
+            zr = zi = 0;
+            n1 = 0;
+            zrSquared = zr * zr;
+            ziSquared = zi * zi;
+
+            do
             {
-              n1 = state.limit;
-            }
-            else
-            {
-              zr = zi = 0;
-              n1 = 0;
+              zi = 2 * zr * zi + ci;
+              zr = zrSquared - ziSquared + cr;
               zrSquared = zr * zr;
               ziSquared = zi * zi;
-
-              do
-              {
-                zi = 2 * zr * zi + ci;
-                zr = zrSquared - ziSquared + cr;
-                zrSquared = zr * zr;
-                ziSquared = zi * zi;
-                ++n1;
-              } while (zrSquared + ziSquared < 4 && n1 != state.limit);
-            }
+              ++n1;
+            } while (zrSquared + ziSquared < 4 && n1 != state.limit);
           }
           field[w + screenWH] = n1;
         }
