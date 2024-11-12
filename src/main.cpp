@@ -297,7 +297,7 @@ int main(int argc, char** argv)
     }
     else
     {
-      printf(" cX:%.8f cY:%.8f", state.centerX, -state.centerY);
+      printf(" cX:%.8f cY:%.8f", state.centerX, state.centerY == -0.0 ? 0.0 : -state.centerY);
       printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
     }
 
