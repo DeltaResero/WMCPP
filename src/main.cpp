@@ -112,25 +112,41 @@ void poweroff()
   switchoff = true;
 }
 
-static inline void drawdot(void* xfb, GXRModeObj* rmode, u16 fx, u16 fy, u32 color)
+static void drawdot(void* xfb, GXRModeObj* rmode, int cx, int cy, u32 color)
 {
-  u32* fb = (u32*)xfb;
+  u32* fb = static_cast<u32*>(xfb);
   const int fbWidthHalf = rmode->fbWidth >> 1;
-  const int x = fx >> 1;
-  const int y = fy;
-  const int x_end = (x + 2 < fbWidthHalf) ? x + 2 : fbWidthHalf - 1;
-  const int y_end = (y + 4 < rmode->xfbHeight) ? y + 4 : rmode->xfbHeight - 1;
+  const int height = rmode->xfbHeight;
 
-  int y_start = (y - 4 >= 0) ? y - 4 : 0;
-  do
+  // Cursor dimensions (approx 5x9 pixels)
+  const int rx = 2;
+  const int ry = 4;
+
+  // Calculate bounds
+  int x_start = (cx >> 1) - rx;
+  int x_end = (cx >> 1) + rx;
+  int y_start = cy - ry;
+  int y_end = cy + ry;
+
+  // Clamp to screen edges
+  if (x_start < 0) x_start = 0;
+  if (x_end >= fbWidthHalf) x_end = fbWidthHalf - 1;
+  if (y_start < 0) y_start = 0;
+  if (y_end >= height) y_end = height - 1;
+
+  // Early exit if cursor is entirely off-screen
+  if (x_start > x_end || y_start > y_end) return;
+
+  // Draw using pointer arithmetic
+  u32* row = fb + (y_start * fbWidthHalf);
+  for (int y = y_start; y <= y_end; ++y)
   {
-    u32 fbOffset = fbWidthHalf * y_start;
-    int x_start = (x - 2 >= 0) ? x - 2 : 0;
-    do
+    for (int x = x_start; x <= x_end; ++x)
     {
-      fb[fbOffset + x_start] = color;
-    } while (++x_start <= x_end);
-  } while (++y_start <= y_end);
+      row[x] = color;
+    }
+    row += fbWidthHalf;
+  }
 }
 
 static void countevs(int chan, const WPADData* data)
