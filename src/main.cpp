@@ -364,13 +364,37 @@ int main(int argc, char** argv)
             zrSquared = zr * zr;
             ziSquared = zi * zi;
 
+            // Periodicity check variables
+            double checkZr = 0;
+            double checkZi = 0;
+            int updateInterval = 1;
+            int count = 0;
+
             do
             {
-              zi = 2 * zr * zi + ci;
+              // Standard Mandelbrot iteration
+              zi = (zr + zr) * zi + ci;
               zr = zrSquared - ziSquared + cr;
               zrSquared = zr * zr;
               ziSquared = zi * zi;
               ++n1;
+
+              // Check if we have entered a repeating orbit (periodicity)
+              if (zr == checkZr && zi == checkZi)
+              {
+                n1 = state.limit;
+                break;
+              }
+
+              // Update the check values at expanding intervals
+              if (++count >= updateInterval)
+              {
+                checkZr = zr;
+                checkZi = zi;
+                count = 0;
+                updateInterval <<= 1;
+                if (updateInterval > 128) updateInterval = 128;
+              }
             } while (zrSquared + ziSquared < 4 && n1 != state.limit);
           }
           field[w + screenWH] = n1;
