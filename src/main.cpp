@@ -184,33 +184,33 @@ static void shutdown_system()
  * values to save memory bandwidth. The resulting 32-bit value contains two Y
  * (luminance) values with shared U and V components between adjacent pixels.
  *
- * @param n2 First pixel's iteration count
- * @param n1 Second pixel's iteration count
+ * @param n1 First pixel's iteration count
+ * @param n2 Second pixel's iteration count
  * @param limit Maximum iteration count
  * @param palette Current color palette pointer
  * @return Packed 32-bit YUV value ready for framebuffer
  */
-static u32 PackYUVPair(int n2, int n1, int limit, PalettePtr palette)
+static u32 PackYUVPair(int n1, int n2, int limit, PalettePtr palette)
 {
   int y1, cb1, cr1, y2, cb2, cr2;
 
-  if (n2 == limit)
+  if (n1 == limit)
   {
     y1 = 0; cb1 = 128; cr1 = 128;
   }
   else
   {
-    const uint8_t* p = palette[n2 & 255];
+    const uint8_t* p = palette[n1 & 255];
     y1 = p[0]; cb1 = p[1]; cr1 = p[2];
   }
 
-  if (n1 == limit)
+  if (n2 == limit)
   {
     y2 = 0; cb2 = 128; cr2 = 128;
   }
   else
   {
-    const uint8_t* p = palette[n1 & 255];
+    const uint8_t* p = palette[n2 & 255];
     y2 = p[0]; cb2 = p[1]; cr2 = p[2];
   }
 
@@ -275,7 +275,7 @@ int main(int argc, char** argv)
   lastTime = gettime();
 
   double cr, ci, zr, zi, zrSquared, ziSquared;
-  int n1, w, h, screenWH, screenWHHalf;
+  int n1, n2, w, h, screenWH, screenWHHalf;
   u32 type;
   WPADData* wd;
 
@@ -341,67 +341,65 @@ int main(int argc, char** argv)
       w = 0;
       do
       {
-        if (state.process)
+        // Process two pixels at a time to match Wii YUV (Y1 U Y2 V) format
+        for (int i = 0; i < 2; ++i)
         {
-          cr = (w - screenW2) * state.zoom + state.centerX;
-          state.cachedX[w] = cr;
-        }
-        else
-        {
-          cr = state.cachedX[w];
-        }
-
-        if (state.process)
-        {
-          if (isInMainCardioidOrBulb(cr, ci))
+          int currentW = w + i;
+          if (state.process)
           {
-            n1 = state.limit;
-          }
-          else
-          {
-            zr = zi = 0;
-            n1 = 0;
-            zrSquared = zr * zr;
-            ziSquared = zi * zi;
+            cr = (currentW - screenW2) * state.zoom + state.centerX;
+            state.cachedX[currentW] = cr;
 
-            // Periodicity check variables
-            double checkZr = 0;
-            double checkZi = 0;
-            int updateInterval = 1;
-            int count = 0;
-
-            do
+            if (isInMainCardioidOrBulb(cr, ci))
             {
-              // Standard Mandelbrot iteration
-              zi = (zr + zr) * zi + ci;
-              zr = zrSquared - ziSquared + cr;
+              n1 = state.limit;
+            }
+            else
+            {
+              zr = zi = 0;
+              n1 = 0;
               zrSquared = zr * zr;
               ziSquared = zi * zi;
-              ++n1;
 
-              // Check if we have entered a repeating orbit (periodicity)
-              if (zr == checkZr && zi == checkZi)
-              {
-                n1 = state.limit;
-                break;
-              }
+              double checkZr = 0;
+              double checkZi = 0;
+              int updateInterval = 1;
+              int count = 0;
 
-              // Update the check values at expanding intervals
-              if (++count >= updateInterval)
+              do
               {
-                checkZr = zr;
-                checkZi = zi;
-                count = 0;
-                updateInterval <<= 1;
-                if (updateInterval > 128) updateInterval = 128;
-              }
-            } while (zrSquared + ziSquared < 4 && n1 != state.limit);
+                zi = (zr + zr) * zi + ci;
+                zr = zrSquared - ziSquared + cr;
+                zrSquared = zr * zr;
+                ziSquared = zi * zi;
+                ++n1;
+
+                if (zr == checkZr && zi == checkZi)
+                {
+                  n1 = state.limit;
+                  break;
+                }
+
+                if (++count >= updateInterval)
+                {
+                  checkZr = zr;
+                  checkZi = zi;
+                  count = 0;
+                  updateInterval <<= 1;
+                  if (updateInterval > 128) updateInterval = 128;
+                }
+              } while (zrSquared + ziSquared < 4 && n1 != state.limit);
+            }
+            field[currentW + screenWH] = n1;
           }
-          field[w + screenWH] = n1;
         }
-        n1 = field[w + screenW * h] + state.cycle;
-        xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n1, state.limit, currentPalette);
-      } while (++w < screenW);
+
+        n1 = field[w + screenWH] + state.cycle;
+        n2 = field[w + 1 + screenWH] + state.cycle;
+        xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n2, state.limit, currentPalette);
+
+        w += 2;
+      } while (w < screenW);
     } while (++h < screenH);
 
     if (state.process)
