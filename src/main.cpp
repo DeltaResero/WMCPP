@@ -77,6 +77,10 @@ public:
     free(cachedY);
   }
 
+  // Prevent copying to avoid double-free of cached arrays
+  MandelbrotState(const MandelbrotState&) = delete;
+  MandelbrotState& operator=(const MandelbrotState&) = delete;
+
   inline void moveView(int screenW2, int screenH2)
   {
     centerX = mouseX * zoom - screenW2 * zoom + oldX;
@@ -120,15 +124,6 @@ void reset(u32 resetCode, void* resetData)
 void poweroff()
 {
   switchoff = true;
-}
-
-static inline u32 fast_reciprocal(u32 a)
-{
-  // Newton-Raphson iteration for 1/x
-  // This gives us about 16 bits of precision
-  u32 x = 0x7FFFFFFF / (a | 1);  // Initial guess
-  x = x * (0x20000 - ((a * x) >> 16)) >> 15;  // One iteration
-  return x;
 }
 
 static inline void drawdot(void* xfb, GXRModeObj* rmode, u16 fx, u16 fy, u32 color)
@@ -322,15 +317,23 @@ int main(int argc, char** argv)
       printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
     }
 
+    // Cache state variables locally to allow the compiler to use registers
+    const int localLimit = state.limit;
+    const double localZoom = state.zoom;
+    const double localCenterX = state.centerX;
+    const double localCenterY = state.centerY;
+    const bool localProcess = state.process;
+    const int localCycle = state.cycle;
+
     h = 20; // Fractal rendering starts below the console area
     do
     {
       screenWH = screenW * h;
       screenWHHalf = (screenW * h) >> 1;
 
-      if (state.process)
+      if (localProcess)
       {
-        ci = -1.0 * (h - screenH2) * state.zoom - state.centerY;
+        ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
         state.cachedY[h] = ci;
       }
       else
@@ -341,18 +344,18 @@ int main(int argc, char** argv)
       w = 0;
       do
       {
-        // Process two pixels at a time to match Wii YUV (Y1 U Y2 V) format
-        for (int i = 0; i < 2; ++i)
+        if (localProcess)
         {
-          int currentW = w + i;
-          if (state.process)
+          // Unrolled loop for two pixels to maximize register usage and minimize branching
+          for (int i = 0; i < 2; ++i)
           {
-            cr = (currentW - screenW2) * state.zoom + state.centerX;
+            int currentW = w + i;
+            cr = (currentW - screenW2) * localZoom + localCenterX;
             state.cachedX[currentW] = cr;
 
             if (isInMainCardioidOrBulb(cr, ci))
             {
-              n1 = state.limit;
+              n1 = localLimit;
             }
             else
             {
@@ -376,7 +379,7 @@ int main(int argc, char** argv)
 
                 if (zr == checkZr && zi == checkZi)
                 {
-                  n1 = state.limit;
+                  n1 = localLimit;
                   break;
                 }
 
@@ -388,15 +391,15 @@ int main(int argc, char** argv)
                   updateInterval <<= 1;
                   if (updateInterval > 128) updateInterval = 128;
                 }
-              } while (zrSquared + ziSquared < 4 && n1 != state.limit);
+              } while (zrSquared + ziSquared < 4 && n1 != localLimit);
             }
             field[currentW + screenWH] = n1;
           }
         }
 
-        n1 = field[w + screenWH] + state.cycle;
-        n2 = field[w + 1 + screenWH] + state.cycle;
-        xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n2, state.limit, currentPalette);
+        n1 = field[w + screenWH] + localCycle;
+        n2 = field[w + 1 + screenWH] + localCycle;
+        xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n2, localLimit, currentPalette);
 
         w += 2;
       } while (w < screenW);
@@ -421,8 +424,8 @@ int main(int argc, char** argv)
         if (!state.debugMode)
         {
           printf(" re:%.8f im:%.8f",
-            (wd->ir.x - screenW2) * state.zoom + state.centerX,
-            (screenH2 - wd->ir.y) * state.zoom - state.centerY);
+            (wd->ir.x - screenW2) * localZoom + localCenterX,
+            (screenH2 - wd->ir.y) * localZoom - localCenterY);
         }
         drawdot(xfb[bufferIndex], rmode, static_cast<u16>(wd->ir.x), static_cast<u16>(wd->ir.y), COLOR_RED);
       }
