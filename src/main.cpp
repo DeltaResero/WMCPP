@@ -331,14 +331,19 @@ int main(int argc, char** argv)
       screenWH = screenW * h;
       screenWHHalf = (screenW * h) >> 1;
 
+      // Variables hoisted out of the pixel loop
+      double ciSquared = 0;
+
       if (localProcess)
       {
         ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
         state.cachedY[h] = ci;
+        ciSquared = ci * ci; // Calculate once per row
       }
       else
       {
         ci = state.cachedY[h];
+        ciSquared = ci * ci; // Calculate for safety
       }
 
       w = 0;
@@ -353,7 +358,14 @@ int main(int argc, char** argv)
             cr = (currentW - screenW2) * localZoom + localCenterX;
             state.cachedX[currentW] = cr;
 
-            if (isInMainCardioidOrBulb(cr, ci))
+            // Inlined Cardioid/Bulb check using pre-calculated ciSquared
+            // q = (x - 1/4)^2 + y^2
+            double q = (cr - CARD_P1) * (cr - CARD_P1) + ciSquared;
+
+            // Cardioid: q * (q + (x - 1/4)) <= 1/4 * y^2
+            // Period-2 Bulb: (x + 1)^2 + y^2 <= 1/16
+            if ((q * (q + (cr - CARD_P1)) <= CARD_P1 * ciSquared) ||
+                (((cr + 1.0) * (cr + 1.0) + ciSquared) <= CARD_P2))
             {
               n1 = localLimit;
             }
