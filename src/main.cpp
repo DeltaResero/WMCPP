@@ -190,7 +190,7 @@ static void shutdown_system()
  * @param paletteIndex Current color palette index
  * @return Packed 32-bit YUV value ready for framebuffer
  */
-static u32 PackYUVPair(int n2, int n1, int limit, uint8_t paletteIndex)
+static u32 PackYUVPair(int n2, int n1, int limit, PalettePtr palette)
 {
   int y1, cb1, cr1, y2, cb2, cr2;
 
@@ -200,7 +200,8 @@ static u32 PackYUVPair(int n2, int n1, int limit, uint8_t paletteIndex)
   }
   else
   {
-    Palette(paletteIndex, n2, &y1, &cb1, &cr1);
+    const uint8_t* p = palette[n2 & 255];
+    y1 = p[0]; cb1 = p[1]; cr1 = p[2];
   }
 
   if (n1 == limit)
@@ -209,7 +210,8 @@ static u32 PackYUVPair(int n2, int n1, int limit, uint8_t paletteIndex)
   }
   else
   {
-    Palette(paletteIndex, n1, &y2, &cb2, &cr2);
+    const uint8_t* p = palette[n1 & 255];
+    y2 = p[0]; cb2 = p[1]; cr2 = p[2];
   }
 
   return (y1 << 24) | ((cb1 + cb2) >> 1 << 16) | (y2 << 8) | ((cr1 + cr2) >> 1);
@@ -282,6 +284,7 @@ int main(int argc, char** argv)
   do
   {
     bufferIndex = !bufferIndex;
+    PalettePtr currentPalette = GetPalettePtr(state.paletteIndex);
     console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
 
     if (state.debugMode)
@@ -355,7 +358,7 @@ int main(int argc, char** argv)
           field[w + screenWH] = n1;
         }
         n1 = field[w + screenW * h] + state.cycle;
-        xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n1, state.limit, state.paletteIndex);
+        xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n1, state.limit, currentPalette);
       } while (++w < screenW);
     } while (++h < screenH);
 

@@ -393,4 +393,22 @@ void Palette(uint8_t paletteIndex, int iterations, int *y, int *u, int *v)
   *v = (*p)[iterations][2];
 }
 
+PalettePtr GetPalettePtr(uint8_t paletteIndex)
+{
+  switch (paletteIndex)
+  {
+    case 0: return Blue;
+    case 1: return Gold;
+    case 2: return Green;
+    case 3: return Ice;
+    case 4: return JuteBlue;
+    case 5: return JuteMap;
+    case 6: return Jute;
+    case 7: return MandelbrotMap;
+    case 8: return Phong;
+    case 9: return Rose;
+    default: return Blue;
+  }
+}
+
 // EOF
