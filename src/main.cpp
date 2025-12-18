@@ -102,20 +102,6 @@ public:
   }
 };
 
-// Helper function for cardioid/period-2 bulb check
-static inline bool isInMainCardioidOrBulb(double cr, double ci)
-{
-    double ci2 = ci * ci;
-    // Check cardioid
-    double q = (cr - CARD_P1) * (cr - CARD_P1) + ci2;
-    if (q * (q + (cr - CARD_P1)) <= CARD_P1 * ci2)
-    {
-        return true;
-    }
-    // Check period-2 bulb
-    return ((cr + 1.0) * (cr + 1.0) + ci2) <= CARD_P2;
-}
-
 void reset(u32 resetCode, void* resetData)
 {
   reboot = true;
@@ -343,7 +329,7 @@ int main(int argc, char** argv)
       else
       {
         ci = state.cachedY[h];
-        ciSquared = ci * ci; // Calculate for safety
+        ciSquared = ci * ci;
       }
 
       w = 0;
