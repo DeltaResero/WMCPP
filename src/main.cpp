@@ -187,7 +187,7 @@ static void shutdown_system()
  * @param n2 First pixel's iteration count
  * @param n1 Second pixel's iteration count
  * @param limit Maximum iteration count
- * @param paletteIndex Current color palette index
+ * @param palette Current color palette pointer
  * @return Packed 32-bit YUV value ready for framebuffer
  */
 static u32 PackYUVPair(int n2, int n1, int limit, PalettePtr palette)
@@ -243,9 +243,17 @@ static void init()
   xfb[0] = static_cast<u32*>(MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode)));
   xfb[1] = static_cast<u32*>(MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode)));
 
-  console_init(xfb[0], 0, 20, rmode->fbWidth, rmode->xfbHeight, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
+  const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
+  int console_x = 4;
+  int console_y = 0;
+  int console_w = rmode->fbWidth - (console_x * 2);
+  int console_h = 20;
+
   VIDEO_ClearFrameBuffer(rmode, xfb[0], COLOR_BLACK);
   VIDEO_ClearFrameBuffer(rmode, xfb[1], COLOR_BLACK);
+
+  console_init(xfb[0], console_x, console_y, console_w, console_h, fbStride);
+
   VIDEO_SetNextFramebuffer(xfb[0]);
   VIDEO_SetBlack(0);
   VIDEO_Flush();
@@ -281,11 +289,21 @@ int main(int argc, char** argv)
   MandelbrotState state;
   bool bufferIndex = 0;
 
+  const int console_x = 4;
+  const int console_y = 0;
+  const int console_w = rmode->fbWidth - (console_x * 2);
+
   do
   {
     bufferIndex = !bufferIndex;
     PalettePtr currentPalette = GetPalettePtr(state.paletteIndex);
-    console_init(xfb[bufferIndex], 0, 20, rmode->fbWidth, 20, fbStride);
+
+    // Clear the top 20 pixels of the current buffer to prevent text smearing
+    for (int i = 0; i < (screenW * 20) >> 1; i++) {
+        xfb[bufferIndex][i] = COLOR_BLACK;
+    }
+
+    console_init(xfb[bufferIndex], console_x, console_y, console_w, 20, fbStride);
 
     if (state.debugMode)
     {
@@ -304,7 +322,7 @@ int main(int argc, char** argv)
       printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
     }
 
-    h = 20;
+    h = 20; // Fractal rendering starts below the console area
     do
     {
       screenWH = screenW * h;
