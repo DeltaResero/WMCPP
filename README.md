@@ -70,7 +70,7 @@ instructions on the official devkitPro wiki:
 
 ## Screenshots
 
-![Mandelbrot Wii Screenshot](https://github.com/DeltaResero/WMCPP/blob/main/extras/Mandelbrotwii-screenshot_4.png?raw=true)
+![Mandelbrot Wii Screenshot](extras/Mandelbrotwii-screenshot_5.png)
 
 <br>
 
