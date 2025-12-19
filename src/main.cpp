@@ -21,6 +21,9 @@ static constexpr double MAX_ZOOM_PRECISION = 1e-14;
 static constexpr double CARD_P1 = 0.25;
 static constexpr double CARD_P2 = 0.0625;
 
+// Color constant for points inside the set (Black in YUV: Y=0, U=128, V=128)
+static const uint8_t Black[3] = {0, 128, 128};
+
 static u32* xfb[2] = {nullptr, nullptr};
 static GXRModeObj* rmode;
 static int evctr = 0;
@@ -187,31 +190,14 @@ static void shutdown_system()
  * @param palette Current color palette pointer
  * @return Packed 32-bit YUV value ready for framebuffer
  */
-static u32 PackYUVPair(int n1, int n2, int limit, PalettePtr palette)
+static inline u32 PackYUVPair(int n1, int n2, int limit, PalettePtr palette)
 {
-  int y1, cb1, cr1, y2, cb2, cr2;
+  // Branchless selection: if n == limit, point to Black, otherwise point to palette color
+  const uint8_t* p1 = (n1 == limit) ? Black : palette[n1 & 255];
+  const uint8_t* p2 = (n2 == limit) ? Black : palette[n2 & 255];
 
-  if (n1 == limit)
-  {
-    y1 = 0; cb1 = 128; cr1 = 128;
-  }
-  else
-  {
-    const uint8_t* p = palette[n1 & 255];
-    y1 = p[0]; cb1 = p[1]; cr1 = p[2];
-  }
-
-  if (n2 == limit)
-  {
-    y2 = 0; cb2 = 128; cr2 = 128;
-  }
-  else
-  {
-    const uint8_t* p = palette[n2 & 255];
-    y2 = p[0]; cb2 = p[1]; cr2 = p[2];
-  }
-
-  return (y1 << 24) | ((cb1 + cb2) >> 1 << 16) | (y2 << 8) | ((cr1 + cr2) >> 1);
+  // Pack Y1, Average U, Y2, Average V
+  return (p1[0] << 24) | ((p1[1] + p2[1]) >> 1 << 16) | (p2[0] << 8) | ((p1[2] + p2[2]) >> 1);
 }
 
 static void init()
