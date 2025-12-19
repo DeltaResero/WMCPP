@@ -345,10 +345,15 @@ int main(int argc, char** argv)
       else
       {
         ci = state.cachedY[h];
+        // We don't strictly need ciSquared here if !process, but safe to calc if needed logic changes
         ciSquared = ci * ci;
       }
 
       w = 0;
+
+      // Calculate starting Real (X) coordinate for the row
+      double rowCr = (0 - screenW2) * localZoom + localCenterX;
+
       do
       {
         if (localProcess)
@@ -357,7 +362,10 @@ int main(int argc, char** argv)
           for (int i = 0; i < 2; ++i)
           {
             int currentW = w + i;
-            cr = (currentW - screenW2) * localZoom + localCenterX;
+            // Use incremental addition instead of multiplication: cr = rowCr + (i * localZoom)
+            cr = rowCr;
+            if (i == 1) cr += localZoom;
+
             state.cachedX[currentW] = cr;
 
             // Inlined Cardioid/Bulb check using pre-calculated ciSquared
@@ -416,6 +424,9 @@ int main(int argc, char** argv)
         xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n2, localLimit, currentPalette);
 
         w += 2;
+        // Increment the base X coordinate for the next pair of pixels
+        rowCr += 2.0 * localZoom;
+
       } while (w < screenW);
     } while (++h < screenH);
 
@@ -441,7 +452,7 @@ int main(int argc, char** argv)
             (wd->ir.x - screenW2) * localZoom + localCenterX,
             (screenH2 - wd->ir.y) * localZoom - localCenterY);
         }
-        drawdot(xfb[bufferIndex], rmode, static_cast<u16>(wd->ir.x), static_cast<u16>(wd->ir.y), COLOR_RED);
+        drawdot(xfb[bufferIndex], rmode, static_cast<int>(wd->ir.x), static_cast<int>(wd->ir.y), COLOR_RED);
       }
       else if (!state.debugMode)
       {
