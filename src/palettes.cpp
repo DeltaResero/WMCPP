@@ -1,4 +1,15 @@
-// palettes.cpp
+// src/palettes.cpp
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// WMCPP (Wii Mandelbrot Computation Project Plus)
+// Copyright (C) 2025 DeltaResero
+// Portions Copyright (C) 2011 Krupkat <krupkat@seznam.cz>
+// Palette Data Copyright (C) 2011 Daniel Egnar, Tom Schumm, and Jussi Kantola
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 
 #include "palettes.hpp"
 
