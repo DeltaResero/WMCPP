@@ -74,25 +74,30 @@ instructions on the official devkitPro wiki:
 
 <br>
 
-## Credits and License
+## Credits
 
-WMCPP is developed by DeltaResero and is a derivative work based on the original
-Mandelbrot for Wii project created by Krupkat in 2011 (originally released as
-unspecified open source). Additional color palette data includes creative
-contributions from Daniel Egnar, Tom Schumm, and Jussi Kantola.
-
-This project is licensed under the **GNU General Public License v3 (GPLv3)** to
-ensure that all modifications and forks remain open source. You are free to
-redistribute and/or modify this program under the terms of the GPLv3 as
-published by the Free Software Foundation.
+WMCPP is developed by **DeltaResero** as a derivative work of the original
+*Mandelbrot for Wii* project created by **Krupkat** in 2011 (released as
+unspecified open source). This project incorporates color palette data from
+**Daniel Egnar**, **Tom Schumm**, and **Jussi Kantola**, as well as historical
+rendering optimizations contributed by **Dashxdr**. We also extend credit to
+the anonymous members of the homebrew community whose research made this
+possible.
 
 ## Disclaimer
 
-This project is a homebrew application for the Wii and is not affiliated with,
-endorsed by, nor sponsored by Nintendo. All trademarks are the property of
-their respective owners.
+This is an unofficial homebrew application that runs on the Wii via the
+Homebrew Channel. It is not affiliated with, endorsed by, nor sponsored by
+Nintendo nor the Homebrew Channel. All trademarks and copyrights are the
+property of their respective owners.
 
-This program is distributed **WITHOUT ANY WARRANTY**; without even the implied
-warranty of **MERCHANTABILITY** or **FITNESS FOR A PARTICULAR PURPOSE**. See
-the [GNU General Public License](https://www.gnu.org/licenses/gpl-3.0.en.html)
-for more details.
+This program is distributed under the terms of the **GNU General Public License
+version 3** (or later). You can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This project is distributed in the hope that it will be useful, but **WITHOUT
+ANY WARRANTY**; without even the implied warranty of **MERCHANTABILITY** or
+**FITNESS FOR A PARTICULAR PURPOSE**. See the [GNU General Public License]
+(https://www.gnu.org/licenses/gpl-3.0.en.html) for more details.
