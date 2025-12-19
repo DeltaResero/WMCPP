@@ -349,6 +349,10 @@ int main(int argc, char** argv)
         ciSquared = ci * ci;
       }
 
+      // Set row pointers for direct access
+      int* rowField = field + screenWH;
+      u32* rowXfb = xfb[bufferIndex] + screenWHHalf;
+
       w = 0;
 
       // Calculate starting Real (X) coordinate for the row
@@ -415,13 +419,17 @@ int main(int argc, char** argv)
                 }
               } while (zrSquared + ziSquared < 4 && n1 != localLimit);
             }
-            field[currentW + screenWH] = n1;
+            // Use pointer arithmetic: rowField[index] instead of field[index + offset]
+            rowField[currentW] = n1;
           }
         }
 
-        n1 = field[w + screenWH] + localCycle;
-        n2 = field[w + 1 + screenWH] + localCycle;
-        xfb[bufferIndex][(w >> 1) + screenWHHalf] = PackYUVPair(n1, n2, localLimit, currentPalette);
+        // Retrieve iteration counts using pointer arithmetic
+        n1 = rowField[w] + localCycle;
+        n2 = rowField[w + 1] + localCycle;
+
+        // Write to XFB using pointer arithmetic
+        rowXfb[w >> 1] = PackYUVPair(n1, n2, localLimit, currentPalette);
 
         w += 2;
         // Increment the base X coordinate for the next pair of pixels
