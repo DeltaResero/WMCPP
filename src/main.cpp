@@ -286,14 +286,12 @@ static void renderMandelbrot(
   do
   {
     int screenWH = screenW * h;
-    double ciSquared = 0;
-    double ci;
 
     if (localProcess)
     {
-      ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
+      double ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
       state.cachedY[h] = ci;
-      ciSquared = ci * ci; // Calculate once per row
+      double ciSquared = ci * ci; // Calculate once per row
       // Render the row data if processing is needed
       renderRow(state, h, screenW, -screenW2 * localZoom + localCenterX, ci, ciSquared);
     }
