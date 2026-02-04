@@ -268,7 +268,7 @@ int main(int argc, char** argv)
   lastTime = gettime();
 
   double cr, ci, zr, zi, zrSquared, ziSquared;
-  int n1, n2, w, h, screenWH, screenWHHalf;
+  int n1, n2, w, screenWH, screenWHHalf;
   u32 type;
   WPADData* wd;
 
@@ -323,7 +323,7 @@ int main(int argc, char** argv)
     const bool localProcess = state.process;
     const int localCycle = state.cycle;
 
-    h = 20; // Fractal rendering starts below the console area
+    int h = 20; // Fractal rendering starts below the console area
     do
     {
       screenWH = screenW * h;
