@@ -148,6 +148,60 @@ static inline u32 PackYUVPair(int n1, int n2, int limit, PalettePtr palette)
 }
 
 /**
+ * Computes the iteration count for a single Mandelbrot pixel
+ */
+static inline int computeMandelbrotIteration(double cr, double ci, double ciSquared, int localLimit)
+{
+  // Inlined Cardioid/Bulb check using pre-calculated ciSquared
+  // q = (x - 1/4)^2 + y^2
+  double q = (cr - CARD_P1) * (cr - CARD_P1) + ciSquared;
+
+  // Cardioid: q * (q + (x - 1/4)) <= 1/4 * y^2
+  // Period-2 Bulb: (x + 1)^2 + y^2 <= 1/16
+  if ((q * (q + (cr - CARD_P1)) <= CARD_P1 * ciSquared) ||
+      (((cr + 1.0) * (cr + 1.0) + ciSquared) <= CARD_P2))
+  {
+    return localLimit;
+  }
+
+  double zr = 0;
+  double zi = 0;
+  int n = 0;
+  double zrSquared = 0;
+  double ziSquared = 0;
+
+  double checkZr = 0;
+  double checkZi = 0;
+  int updateInterval = 1;
+  int count = 0;
+
+  do
+  {
+    zi = (zr + zr) * zi + ci;
+    zr = zrSquared - ziSquared + cr;
+    zrSquared = zr * zr;
+    ziSquared = zi * zi;
+    ++n;
+
+    if (zr == checkZr && zi == checkZi)
+    {
+      return localLimit;
+    }
+
+    if (++count >= updateInterval)
+    {
+      checkZr = zr;
+      checkZi = zi;
+      count = 0;
+      updateInterval <<= 1;
+      if (updateInterval > 128) updateInterval = 128;
+    }
+  } while (zrSquared + ziSquared < 4 && n != localLimit);
+
+  return n;
+}
+
+/**
  * Renders the Mandelbrot set to the framebuffer
  */
 static void renderMandelbrot(
@@ -161,10 +215,6 @@ static void renderMandelbrot(
 {
   double cr;
   double ci;
-  double zr;
-  double zi;
-  double zrSquared;
-  double ziSquared;
   int n1;
   int n2;
 
@@ -220,53 +270,9 @@ static void renderMandelbrot(
 
           state.cachedX[currentW] = cr;
 
-          // Inlined Cardioid/Bulb check using pre-calculated ciSquared
-          // q = (x - 1/4)^2 + y^2
-          double q = (cr - CARD_P1) * (cr - CARD_P1) + ciSquared;
+          // Compute Mandelbrot iteration count for this pixel
+          n1 = computeMandelbrotIteration(cr, ci, ciSquared, localLimit);
 
-          // Cardioid: q * (q + (x - 1/4)) <= 1/4 * y^2
-          // Period-2 Bulb: (x + 1)^2 + y^2 <= 1/16
-          if ((q * (q + (cr - CARD_P1)) <= CARD_P1 * ciSquared) ||
-              (((cr + 1.0) * (cr + 1.0) + ciSquared) <= CARD_P2))
-          {
-            n1 = localLimit;
-          }
-          else
-          {
-            zr = zi = 0;
-            n1 = 0;
-            zrSquared = zr * zr;
-            ziSquared = zi * zi;
-
-            double checkZr = 0;
-            double checkZi = 0;
-            int updateInterval = 1;
-            int count = 0;
-
-            do
-            {
-              zi = (zr + zr) * zi + ci;
-              zr = zrSquared - ziSquared + cr;
-              zrSquared = zr * zr;
-              ziSquared = zi * zi;
-              ++n1;
-
-              if (zr == checkZr && zi == checkZi)
-              {
-                n1 = localLimit;
-                break;
-              }
-
-              if (++count >= updateInterval)
-              {
-                checkZr = zr;
-                checkZi = zi;
-                count = 0;
-                updateInterval <<= 1;
-                if (updateInterval > 128) updateInterval = 128;
-              }
-            } while (zrSquared + ziSquared < 4 && n1 != localLimit);
-          }
           // Use pointer arithmetic: rowField[index] instead of field[index + offset]
           rowField[currentW] = n1;
         }
