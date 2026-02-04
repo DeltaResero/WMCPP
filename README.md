@@ -76,13 +76,12 @@ instructions on the official devkitPro wiki:
 
 ## Credits
 
-WMCPP is developed by **DeltaResero** as a derivative work of the original
-*Mandelbrot for Wii* project created by **Krupkat** in 2011 (released as
-unspecified open source). This project incorporates color palette data from
+WMCPP is a derivative work of the original *Mandelbrot for Wii* project created
+by **Krupkat** in 2011 (released as unspecified open source). As featured in
+the original version, this fork also features the color palette data as from
 **Daniel Egnar**, **Tom Schumm**, and **Jussi Kantola**, as well as historical
-rendering optimizations contributed by **Dashxdr**. We also extend credit to
-the anonymous members of the homebrew community whose research made this
-possible.
+rendering optimizations contributed by **Dashxdr**. Credit is extended to the
+anonymous members of the homebrew community whose research made this possible.
 
 ## Disclaimer
 
@@ -97,7 +96,8 @@ terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
 version.
 
-This project is distributed in the hope that it will be useful, but **WITHOUT
-ANY WARRANTY**; without even the implied warranty of **MERCHANTABILITY** or
-**FITNESS FOR A PARTICULAR PURPOSE**. See the [GNU General Public License]
-(https://www.gnu.org/licenses/gpl-3.0.en.html) for more details.
+This project is distributed in the hope that it will be useful, but
+**WITHOUT ANY WARRANTY**; without even the implied warranty of
+**MERCHANTABILITY** or **FITNESS FOR A PARTICULAR PURPOSE**. See the
+[GNU General Public License](https://www.gnu.org/licenses/gpl-3.0.html)
+for more details.
