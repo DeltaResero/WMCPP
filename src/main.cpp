@@ -125,6 +125,221 @@ void poweroff()
   switchoff = true;
 }
 
+/**
+ * Packs two adjacent pixels' YUV values into the Wii's native framebuffer format.
+ * The Wii uses an interleaved YUV format where two pixels share chrominance (U,V)
+ * values to save memory bandwidth. The resulting 32-bit value contains two Y
+ * (luminance) values with shared U and V components between adjacent pixels.
+ *
+ * @param n1 First pixel's iteration count
+ * @param n2 Second pixel's iteration count
+ * @param limit Maximum iteration count
+ * @param palette Current color palette pointer
+ * @return Packed 32-bit YUV value ready for framebuffer
+ */
+static inline u32 PackYUVPair(int n1, int n2, int limit, PalettePtr palette)
+{
+  // Branchless selection: if n == limit, point to Black, otherwise point to palette color
+  const uint8_t* p1 = (n1 == limit) ? Black : palette[n1 & 255];
+  const uint8_t* p2 = (n2 == limit) ? Black : palette[n2 & 255];
+
+  // Pack Y1, Average U, Y2, Average V
+  return (p1[0] << 24) | ((p1[1] + p2[1]) >> 1 << 16) | (p2[0] << 8) | ((p1[2] + p2[2]) >> 1);
+}
+
+/**
+ * Renders the Mandelbrot set to the framebuffer
+ */
+static void renderMandelbrot(
+  MandelbrotState& state,
+  u32* framebuffer,
+  PalettePtr currentPalette,
+  int screenW,
+  int screenH,
+  int screenW2,
+  int screenH2)
+{
+  double cr;
+  double ci;
+  double zr;
+  double zi;
+  double zrSquared;
+  double ziSquared;
+  int n1;
+  int n2;
+  int w;
+  int screenWH;
+  int screenWHHalf;
+
+  // Cache state variables locally to allow the compiler to use registers
+  const int localLimit = state.limit;
+  const double localZoom = state.zoom;
+  const double localCenterX = state.centerX;
+  const double localCenterY = state.centerY;
+  const bool localProcess = state.process;
+  const int localCycle = state.cycle;
+
+  int h = 20; // Fractal rendering starts below the console area
+  do
+  {
+    screenWH = screenW * h;
+    screenWHHalf = (screenW * h) >> 1;
+
+    // Variables hoisted out of the pixel loop
+    double ciSquared = 0;
+
+    if (localProcess)
+    {
+      ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
+      state.cachedY[h] = ci;
+      ciSquared = ci * ci; // Calculate once per row
+    }
+    else
+    {
+      ci = state.cachedY[h];
+      ciSquared = ci * ci;
+    }
+
+    // Set row pointers for direct access
+    int* rowField = field + screenWH;
+    u32* rowXfb = framebuffer + screenWHHalf;
+
+    w = 0;
+
+    // Calculate starting Real (X) coordinate for the row
+    double rowCr = -screenW2 * localZoom + localCenterX;
+
+    do
+    {
+      if (localProcess)
+      {
+        // Unrolled loop for two pixels to maximize register usage and minimize branching
+        for (int i = 0; i < 2; ++i)
+        {
+          int currentW = w + i;
+          // Use incremental addition instead of multiplication: cr = rowCr + (i * localZoom)
+          cr = rowCr;
+          if (i == 1) cr += localZoom;
+
+          state.cachedX[currentW] = cr;
+
+          // Inlined Cardioid/Bulb check using pre-calculated ciSquared
+          // q = (x - 1/4)^2 + y^2
+          double q = (cr - CARD_P1) * (cr - CARD_P1) + ciSquared;
+
+          // Cardioid: q * (q + (x - 1/4)) <= 1/4 * y^2
+          // Period-2 Bulb: (x + 1)^2 + y^2 <= 1/16
+          if ((q * (q + (cr - CARD_P1)) <= CARD_P1 * ciSquared) ||
+              (((cr + 1.0) * (cr + 1.0) + ciSquared) <= CARD_P2))
+          {
+            n1 = localLimit;
+          }
+          else
+          {
+            zr = zi = 0;
+            n1 = 0;
+            zrSquared = zr * zr;
+            ziSquared = zi * zi;
+
+            double checkZr = 0;
+            double checkZi = 0;
+            int updateInterval = 1;
+            int count = 0;
+
+            do
+            {
+              zi = (zr + zr) * zi + ci;
+              zr = zrSquared - ziSquared + cr;
+              zrSquared = zr * zr;
+              ziSquared = zi * zi;
+              ++n1;
+
+              if (zr == checkZr && zi == checkZi)
+              {
+                n1 = localLimit;
+                break;
+              }
+
+              if (++count >= updateInterval)
+              {
+                checkZr = zr;
+                checkZi = zi;
+                count = 0;
+                updateInterval <<= 1;
+                if (updateInterval > 128) updateInterval = 128;
+              }
+            } while (zrSquared + ziSquared < 4 && n1 != localLimit);
+          }
+          // Use pointer arithmetic: rowField[index] instead of field[index + offset]
+          rowField[currentW] = n1;
+        }
+      }
+
+      // Retrieve iteration counts using pointer arithmetic
+      n1 = rowField[w] + localCycle;
+      n2 = rowField[w + 1] + localCycle;
+
+      // Write to XFB using pointer arithmetic
+      rowXfb[w >> 1] = PackYUVPair(n1, n2, localLimit, currentPalette);
+
+      w += 2;
+      // Increment the base X coordinate for the next pair of pixels
+      rowCr += 2.0 * localZoom;
+
+    } while (w < screenW);
+  } while (++h < screenH);
+
+  if (state.process)
+  {
+    state.process = false;
+  }
+}
+
+/**
+ * Updates the display with coordinate information
+ */
+static void updateDisplay(
+  const MandelbrotState& state,
+  const WPADData* wd,
+  int screenW2,
+  int screenH2,
+  double localZoom,
+  double localCenterX,
+  double localCenterY)
+{
+  if (state.debugMode)
+  {
+    u64 currentTime = gettime();
+    u32 frameTime = (u32)((currentTime - lastTime) * 1000 / TB_TIMER_CLOCK);
+    lastTime = currentTime;
+
+    struct mallinfo mi = mallinfo();
+    float memused = mi.uordblks / (1024.0f * 1024.0f);
+
+    printf(" Frame Time:%d Mem: %.1fMB Iter: %d", frameTime, memused, state.limit);
+  }
+  else
+  {
+    printf(" cX:%.8f cY:%.8f", state.centerX, state.centerY == -0.0 ? 0.0 : -state.centerY);
+    printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
+  }
+
+  // Display cursor coordinates if IR is valid
+  if (wd && wd->ir.valid)
+  {
+    if (!state.debugMode)
+    {
+      printf(" re:%.8f im:%.8f",
+        (wd->ir.x - screenW2) * localZoom + localCenterX,
+        (screenH2 - wd->ir.y) * localZoom - localCenterY);
+    }
+  }
+  else if (wd && !state.debugMode)
+  {
+    printf(" No Cursor");
+  }
+}
+
 static void drawdot(void* xfb, GXRModeObj* rmode, int cx, int cy, u32 color)
 {
   u32* fb = static_cast<u32*>(xfb);
@@ -188,28 +403,6 @@ static void shutdown_system()
   }
 }
 
-/**
- * Packs two adjacent pixels' YUV values into the Wii's native framebuffer format.
- * The Wii uses an interleaved YUV format where two pixels share chrominance (U,V)
- * values to save memory bandwidth. The resulting 32-bit value contains two Y
- * (luminance) values with shared U and V components between adjacent pixels.
- *
- * @param n1 First pixel's iteration count
- * @param n2 Second pixel's iteration count
- * @param limit Maximum iteration count
- * @param palette Current color palette pointer
- * @return Packed 32-bit YUV value ready for framebuffer
- */
-static inline u32 PackYUVPair(int n1, int n2, int limit, PalettePtr palette)
-{
-  // Branchless selection: if n == limit, point to Black, otherwise point to palette color
-  const uint8_t* p1 = (n1 == limit) ? Black : palette[n1 & 255];
-  const uint8_t* p2 = (n2 == limit) ? Black : palette[n2 & 255];
-
-  // Pack Y1, Average U, Y2, Average V
-  return (p1[0] << 24) | ((p1[1] + p2[1]) >> 1 << 16) | (p2[0] << 8) | ((p1[2] + p2[2]) >> 1);
-}
-
 static void init()
 {
   VIDEO_Init();
@@ -267,17 +460,6 @@ int main(int argc, char** argv)
   std::atexit(cleanup_field);
   lastTime = gettime();
 
-  double cr;
-  double ci;
-  double zr;
-  double zi;
-  double zrSquared;
-  double ziSquared;
-  int n1;
-  int n2;
-  int w;
-  int screenWH;
-  int screenWHHalf;
   u32 type;
   WPADData* wd;
 
@@ -307,146 +489,13 @@ int main(int argc, char** argv)
 
     console_init(xfb[bufferIndex], console_x, console_y, console_w, 20, fbStride);
 
-    if (state.debugMode)
-    {
-      u64 currentTime = gettime();
-      u32 frameTime = (u32)((currentTime - lastTime) * 1000 / TB_TIMER_CLOCK);
-      lastTime = currentTime;
-
-      struct mallinfo mi = mallinfo();
-      float memused = mi.uordblks / (1024.0f * 1024.0f);
-
-      printf(" Frame Time:%d Mem: %.1fMB Iter: %d", frameTime, memused, state.limit);
-    }
-    else
-    {
-      printf(" cX:%.8f cY:%.8f", state.centerX, state.centerY == -0.0 ? 0.0 : -state.centerY);
-      printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
-    }
-
-    // Cache state variables locally to allow the compiler to use registers
-    const int localLimit = state.limit;
+    // Cache zoom and center for display calculations
     const double localZoom = state.zoom;
     const double localCenterX = state.centerX;
     const double localCenterY = state.centerY;
-    const bool localProcess = state.process;
-    const int localCycle = state.cycle;
 
-    int h = 20; // Fractal rendering starts below the console area
-    do
-    {
-      screenWH = screenW * h;
-      screenWHHalf = (screenW * h) >> 1;
-
-      // Variables hoisted out of the pixel loop
-      double ciSquared = 0;
-
-      if (localProcess)
-      {
-        ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
-        state.cachedY[h] = ci;
-        ciSquared = ci * ci; // Calculate once per row
-      }
-      else
-      {
-        ci = state.cachedY[h];
-        // We don't strictly need ciSquared here if !process, but safe to calc if needed logic changes
-        ciSquared = ci * ci;
-      }
-
-      // Set row pointers for direct access
-      int* rowField = field + screenWH;
-      u32* rowXfb = xfb[bufferIndex] + screenWHHalf;
-
-      w = 0;
-
-      // Calculate starting Real (X) coordinate for the row
-      double rowCr = -screenW2 * localZoom + localCenterX;
-
-      do
-      {
-        if (localProcess)
-        {
-          // Unrolled loop for two pixels to maximize register usage and minimize branching
-          for (int i = 0; i < 2; ++i)
-          {
-            int currentW = w + i;
-            // Use incremental addition instead of multiplication: cr = rowCr + (i * localZoom)
-            cr = rowCr;
-            if (i == 1) cr += localZoom;
-
-            state.cachedX[currentW] = cr;
-
-            // Inlined Cardioid/Bulb check using pre-calculated ciSquared
-            // q = (x - 1/4)^2 + y^2
-            double q = (cr - CARD_P1) * (cr - CARD_P1) + ciSquared;
-
-            // Cardioid: q * (q + (x - 1/4)) <= 1/4 * y^2
-            // Period-2 Bulb: (x + 1)^2 + y^2 <= 1/16
-            if ((q * (q + (cr - CARD_P1)) <= CARD_P1 * ciSquared) ||
-                (((cr + 1.0) * (cr + 1.0) + ciSquared) <= CARD_P2))
-            {
-              n1 = localLimit;
-            }
-            else
-            {
-              zr = zi = 0;
-              n1 = 0;
-              zrSquared = zr * zr;
-              ziSquared = zi * zi;
-
-              double checkZr = 0;
-              double checkZi = 0;
-              int updateInterval = 1;
-              int count = 0;
-
-              do
-              {
-                zi = (zr + zr) * zi + ci;
-                zr = zrSquared - ziSquared + cr;
-                zrSquared = zr * zr;
-                ziSquared = zi * zi;
-                ++n1;
-
-                if (zr == checkZr && zi == checkZi)
-                {
-                  n1 = localLimit;
-                  break;
-                }
-
-                if (++count >= updateInterval)
-                {
-                  checkZr = zr;
-                  checkZi = zi;
-                  count = 0;
-                  updateInterval <<= 1;
-                  if (updateInterval > 128) updateInterval = 128;
-                }
-              } while (zrSquared + ziSquared < 4 && n1 != localLimit);
-            }
-            // Use pointer arithmetic: rowField[index] instead of field[index + offset]
-            rowField[currentW] = n1;
-          }
-        }
-
-        // Retrieve iteration counts using pointer arithmetic
-        n1 = rowField[w] + localCycle;
-        n2 = rowField[w + 1] + localCycle;
-
-        // Write to XFB using pointer arithmetic
-        rowXfb[w >> 1] = PackYUVPair(n1, n2, localLimit, currentPalette);
-
-        w += 2;
-        // Increment the base X coordinate for the next pair of pixels
-        rowCr += 2.0 * localZoom;
-
-      } while (w < screenW);
-    } while (++h < screenH);
-
-    if (state.process)
-    {
-      state.process = false;
-    }
+    // Render the Mandelbrot set
+    renderMandelbrot(state, xfb[bufferIndex], currentPalette, screenW, screenH, screenW2, screenH2);
 
     if (state.cycling)
     {
@@ -454,22 +503,22 @@ int main(int argc, char** argv)
     }
 
     WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
+
+    WPADData* wdForDisplay = nullptr;
     if (WPAD_Probe(0, &type) == WPAD_ERR_NONE)
     {
       wd = WPAD_Data(0);
-      if (wd->ir.valid)
+      wdForDisplay = wd;
+    }
+
+    // Update display with current state and cursor info
+    updateDisplay(state, wdForDisplay, screenW2, screenH2, localZoom, localCenterX, localCenterY);
+
+    if (wdForDisplay)
+    {
+      if (wdForDisplay->ir.valid)
       {
-        if (!state.debugMode)
-        {
-          printf(" re:%.8f im:%.8f",
-            (wd->ir.x - screenW2) * localZoom + localCenterX,
-            (screenH2 - wd->ir.y) * localZoom - localCenterY);
-        }
-        drawdot(xfb[bufferIndex], rmode, static_cast<int>(wd->ir.x), static_cast<int>(wd->ir.y), COLOR_RED);
-      }
-      else if (!state.debugMode)
-      {
-        printf(" No Cursor");
+        drawdot(xfb[bufferIndex], rmode, static_cast<int>(wdForDisplay->ir.x), static_cast<int>(wdForDisplay->ir.y), COLOR_RED);
       }
 
       if ((wd->btns_d & WPAD_BUTTON_MINUS) && (wd->btns_d & WPAD_BUTTON_PLUS))
