@@ -267,8 +267,17 @@ int main(int argc, char** argv)
   std::atexit(cleanup_field);
   lastTime = gettime();
 
-  double cr, ci, zr, zi, zrSquared, ziSquared;
-  int n1, n2, w, screenWH, screenWHHalf;
+  double cr;
+  double ci;
+  double zr;
+  double zi;
+  double zrSquared;
+  double ziSquared;
+  int n1;
+  int n2;
+  int w;
+  int screenWH;
+  int screenWHHalf;
   u32 type;
   WPADData* wd;
 
@@ -352,7 +361,7 @@ int main(int argc, char** argv)
       w = 0;
 
       // Calculate starting Real (X) coordinate for the row
-      double rowCr = (0 - screenW2) * localZoom + localCenterX;
+      double rowCr = -screenW2 * localZoom + localCenterX;
 
       do
       {
