@@ -375,28 +375,22 @@ namespace
     { 104,186,133 },{ 108,183,130 },{ 112,181,130 },{ 117,179,127 },{ 121,176,123 },{ 126,174,120 },{ 128,172,118 },{ 133,170,115 },
     { 139,166,114 },{ 141,165,112 },{ 146,162,109 },{ 151,160,105 },{ 155,157,102 },{ 158,156,100 },{ 164,152, 99 },{ 168,150, 96 }
   };
+
+  // Lookup table for palettes
+  static const PalettePtr PaletteTable[] = {
+    Blue, Gold, Green, Ice, JuteBlue, JuteMap, Jute, MandelbrotMap, Phong, Rose
+  };
+
+  static const int PaletteCount = sizeof(PaletteTable) / sizeof(PaletteTable[0]);
 }  // namespace
 
 // Implementation of the Palette function
 void Palette(uint8_t paletteIndex, int iterations, int *y, int *u, int *v)
 {
-  const uint8_t (*p)[256][3];  // Pointer to the selected palette
+  // Safety check to prevent out of bounds access
+  uint8_t safeIndex = (paletteIndex >= PaletteCount) ? 0 : paletteIndex;
 
-  // Select the appropriate palette based on paletteIndex
-  switch (paletteIndex)
-  {
-    case 0: p = &Blue;           break;
-    case 1: p = &Gold;           break;
-    case 2: p = &Green;          break;
-    case 3: p = &Ice;            break;
-    case 4: p = &JuteBlue;       break;
-    case 5: p = &JuteMap;        break;
-    case 6: p = &Jute;           break;
-    case 7: p = &MandelbrotMap;  break;
-    case 8: p = &Phong;          break;
-    case 9: p = &Rose;           break;
-    default: p = &Blue;          break;
-  }
+  const uint8_t (*p)[256][3] = (const uint8_t (*)[256][3])PaletteTable[safeIndex];
 
   iterations = iterations & 255;          // Adjust iteration count to range 0..255
   *y = (*p)[iterations][0];               // Select and pass Y, U, V components
@@ -406,20 +400,12 @@ void Palette(uint8_t paletteIndex, int iterations, int *y, int *u, int *v)
 
 PalettePtr GetPalettePtr(uint8_t paletteIndex)
 {
-  switch (paletteIndex)
+  // Safety check to prevent out of bounds access
+  if (paletteIndex >= PaletteCount)
   {
-    case 0: return Blue;
-    case 1: return Gold;
-    case 2: return Green;
-    case 3: return Ice;
-    case 4: return JuteBlue;
-    case 5: return JuteMap;
-    case 6: return Jute;
-    case 7: return MandelbrotMap;
-    case 8: return Phong;
-    case 9: return Rose;
-    default: return Blue;
+    return Blue;
   }
+  return PaletteTable[paletteIndex];
 }
 
 // EOF

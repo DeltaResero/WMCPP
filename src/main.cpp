@@ -10,6 +10,9 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
+#include "palettes.hpp"
+
+#include <algorithm> // For std::min, std::max
 #include <cstdio>
 #include <cstdlib>
 #include <malloc.h>
@@ -17,7 +20,6 @@
 #include <gccore.h>
 #include <wiiuse/wpad.h>
 #include <ogc/lwp_watchdog.h>
-#include "palettes.hpp"
 
 // Aligned buffer sizes for DMA transfers
 #define ALIGN32(x) (((x) + 31) & ~31)
@@ -148,18 +150,35 @@ static inline u32 PackYUVPair(int n1, int n2, int limit, PalettePtr palette)
 }
 
 /**
+ * Checks if a point is inside the main Cardioid or the period-2 Bulb.
+ * Extracted to reduce cyclomatic complexity of the main compute function.
+ */
+static inline bool isInsideCardioidOrBulb(double cr, double ciSquared)
+{
+  // q = (x - 1/4)^2 + y^2
+  double q = (cr - CARD_P1) * (cr - CARD_P1) + ciSquared;
+
+  // Cardioid: q * (q + (x - 1/4)) <= 1/4 * y^2
+  if (q * (q + (cr - CARD_P1)) <= CARD_P1 * ciSquared)
+  {
+    return true;
+  }
+  // Period-2 Bulb: (x + 1)^2 + y^2 <= 1/16
+  if (((cr + 1.0) * (cr + 1.0) + ciSquared) <= CARD_P2)
+  {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Computes the iteration count for a single Mandelbrot pixel
  */
 static inline int computeMandelbrotIteration(double cr, double ci, double ciSquared, int localLimit)
 {
   // Inlined Cardioid/Bulb check using pre-calculated ciSquared
-  // q = (x - 1/4)^2 + y^2
-  double q = (cr - CARD_P1) * (cr - CARD_P1) + ciSquared;
-
-  // Cardioid: q * (q + (x - 1/4)) <= 1/4 * y^2
-  // Period-2 Bulb: (x + 1)^2 + y^2 <= 1/16
-  if ((q * (q + (cr - CARD_P1)) <= CARD_P1 * ciSquared) ||
-      (((cr + 1.0) * (cr + 1.0) + ciSquared) <= CARD_P2))
+  if (isInsideCardioidOrBulb(cr, ciSquared))
   {
     return localLimit;
   }
@@ -194,12 +213,54 @@ static inline int computeMandelbrotIteration(double cr, double ci, double ciSqua
       checkZi = zi;
       count = 0;
       updateInterval <<= 1;
-      if (updateInterval > 128) updateInterval = 128;
+      if (updateInterval > 128)
+      {
+        updateInterval = 128;
+      }
     }
   } while (zrSquared + ziSquared < 4 && n != localLimit);
 
   return n;
 }
+
+/**
+ * Renders a single row of the Mandelbrot set.
+ * Extracted to reduce line count of renderMandelbrot.
+ */
+static void renderRow(MandelbrotState& state, int h, int screenW, double rowCr, double ci, double ciSquared)
+{
+  int* rowField = field + (screenW * h);
+  int w = 0;
+  int localLimit = state.limit;
+  double localZoom = state.zoom;
+
+  do
+  {
+    // Unrolled loop for two pixels to maximize register usage and minimize branching
+    for (int i = 0; i < 2; ++i)
+    {
+      int currentW = w + i;
+      // Use incremental addition instead of multiplication: cr = rowCr + (i * localZoom)
+      double cr = rowCr;
+      if (i == 1)
+      {
+        cr += localZoom;
+      }
+
+      state.cachedX[currentW] = cr;
+
+      // Compute Mandelbrot iteration count for this pixel
+      int n1 = computeMandelbrotIteration(cr, ci, ciSquared, localLimit);
+
+      // Use pointer arithmetic: rowField[index] instead of field[index + offset]
+      rowField[currentW] = n1;
+    }
+    w += 2;
+    // Increment the base X coordinate for the next pair of pixels
+    rowCr += 2.0 * localZoom;
+  } while (w < screenW);
+}
+
 
 /**
  * Renders the Mandelbrot set to the framebuffer
@@ -213,11 +274,6 @@ static void renderMandelbrot(
   int screenW2,
   int screenH2)
 {
-  double cr;
-  double ci;
-  int n1;
-  int n2;
-
   // Cache state variables locally to allow the compiler to use registers
   const int localLimit = state.limit;
   const double localZoom = state.zoom;
@@ -230,66 +286,33 @@ static void renderMandelbrot(
   do
   {
     int screenWH = screenW * h;
-    int screenWHHalf = (screenW * h) >> 1;
-
-    // Variables hoisted out of the pixel loop
     double ciSquared = 0;
+    double ci;
 
     if (localProcess)
     {
       ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
       state.cachedY[h] = ci;
       ciSquared = ci * ci; // Calculate once per row
-    }
-    else
-    {
-      ci = state.cachedY[h];
-      ciSquared = ci * ci;
+      // Render the row data if processing is needed
+      renderRow(state, h, screenW, -screenW2 * localZoom + localCenterX, ci, ciSquared);
     }
 
-    // Set row pointers for direct access
+    // Draw pixels to XFB
     int* rowField = field + screenWH;
-    u32* rowXfb = framebuffer + screenWHHalf;
-
+    u32* rowXfb = framebuffer + (screenWH >> 1);
     int w = 0;
-
-    // Calculate starting Real (X) coordinate for the row
-    double rowCr = -screenW2 * localZoom + localCenterX;
 
     do
     {
-      if (localProcess)
-      {
-        // Unrolled loop for two pixels to maximize register usage and minimize branching
-        for (int i = 0; i < 2; ++i)
-        {
-          int currentW = w + i;
-          // Use incremental addition instead of multiplication: cr = rowCr + (i * localZoom)
-          cr = rowCr;
-          if (i == 1) cr += localZoom;
-
-          state.cachedX[currentW] = cr;
-
-          // Compute Mandelbrot iteration count for this pixel
-          n1 = computeMandelbrotIteration(cr, ci, ciSquared, localLimit);
-
-          // Use pointer arithmetic: rowField[index] instead of field[index + offset]
-          rowField[currentW] = n1;
-        }
-      }
-
       // Retrieve iteration counts using pointer arithmetic
-      n1 = rowField[w] + localCycle;
-      n2 = rowField[w + 1] + localCycle;
-
+      int n1 = rowField[w] + localCycle;
+      int n2 = rowField[w + 1] + localCycle;
       // Write to XFB using pointer arithmetic
       rowXfb[w >> 1] = PackYUVPair(n1, n2, localLimit, currentPalette);
-
       w += 2;
-      // Increment the base X coordinate for the next pair of pixels
-      rowCr += 2.0 * localZoom;
-
     } while (w < screenW);
+
   } while (++h < screenH);
 
   if (state.process)
@@ -301,14 +324,7 @@ static void renderMandelbrot(
 /**
  * Updates the display with coordinate information
  */
-static void updateDisplay(
-  const MandelbrotState& state,
-  const WPADData* wd,
-  int screenW2,
-  int screenH2,
-  double localZoom,
-  double localCenterX,
-  double localCenterY)
+static void updateDisplay(const MandelbrotState& state, const WPADData* wd, int screenW2, int screenH2)
 {
   if (state.debugMode)
   {
@@ -328,14 +344,11 @@ static void updateDisplay(
   }
 
   // Display cursor coordinates if IR is valid
-  if (wd && wd->ir.valid)
+  if (wd && wd->ir.valid && !state.debugMode)
   {
-    if (!state.debugMode)
-    {
-      printf(" re:%.8f im:%.8f",
-        (wd->ir.x - screenW2) * localZoom + localCenterX,
-        (screenH2 - wd->ir.y) * localZoom - localCenterY);
-    }
+    printf(" re:%.8f im:%.8f",
+      (wd->ir.x - screenW2) * state.zoom + state.centerX,
+      (screenH2 - wd->ir.y) * state.zoom - state.centerY);
   }
   else if (wd && !state.debugMode)
   {
@@ -353,20 +366,17 @@ static void drawdot(void* xfb, GXRModeObj* rmode, int cx, int cy, u32 color)
   const int rx = 2;
   const int ry = 4;
 
-  // Calculate bounds
-  int x_start = (cx >> 1) - rx;
-  int x_end = (cx >> 1) + rx;
-  int y_start = cy - ry;
-  int y_end = cy + ry;
-
-  // Clamp to screen edges
-  x_start = (x_start < 0) ? 0 : x_start;
-  x_end = (x_end >= fbWidthHalf) ? fbWidthHalf - 1 : x_end;
-  y_start = (y_start < 0) ? 0 : y_start;
-  y_end = (y_end >= height) ? height - 1 : y_end;
+  // Use std::max/min to clamp values without branching (reduces complexity)
+  int x_start = std::max(0, (cx >> 1) - rx);
+  int x_end = std::min(fbWidthHalf - 1, (cx >> 1) + rx);
+  int y_start = std::max(0, cy - ry);
+  int y_end = std::min(height - 1, cy + ry);
 
   // Early exit if cursor is entirely off-screen
-  if (x_start > x_end || y_start > y_end) return;
+  if (x_start > x_end || y_start > y_end)
+  {
+    return;
+  }
 
   // Draw using pointer arithmetic
   u32* row = fb + (y_start * fbWidthHalf);
@@ -457,28 +467,79 @@ static void init()
   WPAD_SetVRes(0, rmode->fbWidth, rmode->xfbHeight);
 }
 
+/**
+ * Input Handler
+ */
+static bool handleInput(MandelbrotState& state, const WPADData* wd, int screenW2, int screenH2)
+{
+  if (!wd)
+  {
+    return false;
+  }
+
+  if ((wd->btns_d & WPAD_BUTTON_MINUS) && (wd->btns_d & WPAD_BUTTON_PLUS))
+  {
+    state.debugMode = !state.debugMode;
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_A)
+  {
+    state.mouseX = wd->ir.x;
+    state.mouseY = wd->ir.y;
+    state.zoomView(screenW2, screenH2);
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_B)
+  {
+    state.zoom = INITIAL_ZOOM;
+    state.centerX = state.centerY = state.oldX = state.oldY = 0;
+    state.process = true;
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_DOWN)
+  {
+    state.cycling = !state.cycling;
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_2)
+  {
+    state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
+    state.process = true;
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_1)
+  {
+    state.limit = (state.limit < LIMIT_MAX) ? (state.limit << 1) : LIMIT_MAX;
+    state.process = true;
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_MINUS)
+  {
+    state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : 9;
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_PLUS)
+  {
+    state.paletteIndex = (state.paletteIndex + 1) % 10;
+  }
+
+  return ((wd->btns_d & WPAD_BUTTON_HOME) || reboot);
+}
+
 int main(int argc, char** argv)
 {
   init();
   std::atexit(cleanup_field);
   lastTime = gettime();
 
-  u32 type;
-  WPADData* wd;
-
   const int screenW = (rmode->fbWidth + 31) & ~31;
   const int screenH = rmode->xfbHeight;
   const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
   field = static_cast<int*>(aligned_alloc(32, ALIGN32(sizeof(int) * screenW * screenH)));
-  const int screenW2 = screenW >> 1;
-  const int screenH2 = screenH >> 1;
 
   MandelbrotState state;
   bool bufferIndex = 0;
-
-  const int console_x = 4;
-  const int console_y = 0;
-  const int console_w = rmode->fbWidth - (console_x * 2);
+  u32 type;
 
   do
   {
@@ -486,19 +547,13 @@ int main(int argc, char** argv)
     PalettePtr currentPalette = GetPalettePtr(state.paletteIndex);
 
     // Clear the top 20 pixels of the current buffer to prevent text smearing
-    for (int i = 0; i < (screenW * 20) >> 1; i++) {
-        xfb[bufferIndex][i] = COLOR_BLACK;
+    for (int i = 0; i < (screenW * 20) >> 1; i++)
+    {
+      xfb[bufferIndex][i] = COLOR_BLACK;
     }
+    console_init(xfb[bufferIndex], 4, 0, rmode->fbWidth - 8, 20, fbStride);
 
-    console_init(xfb[bufferIndex], console_x, console_y, console_w, 20, fbStride);
-
-    // Cache zoom and center for display calculations
-    const double localZoom = state.zoom;
-    const double localCenterX = state.centerX;
-    const double localCenterY = state.centerY;
-
-    // Render the Mandelbrot set
-    renderMandelbrot(state, xfb[bufferIndex], currentPalette, screenW, screenH, screenW2, screenH2);
+    renderMandelbrot(state, xfb[bufferIndex], currentPalette, screenW, screenH, screenW >> 1, screenH >> 1);
 
     if (state.cycling)
     {
@@ -506,76 +561,20 @@ int main(int argc, char** argv)
     }
 
     WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
+    WPADData* wd = (WPAD_Probe(0, &type) == WPAD_ERR_NONE) ? WPAD_Data(0) : nullptr;
 
-    WPADData* wdForDisplay = nullptr;
-    if (WPAD_Probe(0, &type) == WPAD_ERR_NONE)
+    updateDisplay(state, wd, screenW >> 1, screenH >> 1);
+
+    if (wd && wd->ir.valid)
     {
-      wd = WPAD_Data(0);
-      wdForDisplay = wd;
+      drawdot(xfb[bufferIndex], rmode, static_cast<int>(wd->ir.x), static_cast<int>(wd->ir.y), COLOR_RED);
     }
 
-    // Update display with current state and cursor info
-    updateDisplay(state, wdForDisplay, screenW2, screenH2, localZoom, localCenterX, localCenterY);
-
-    if (wdForDisplay)
+    if (handleInput(state, wd, screenW >> 1, screenH >> 1))
     {
-      if (wdForDisplay->ir.valid)
-      {
-        drawdot(xfb[bufferIndex], rmode, static_cast<int>(wdForDisplay->ir.x), static_cast<int>(wdForDisplay->ir.y), COLOR_RED);
-      }
-
-      if ((wd->btns_d & WPAD_BUTTON_MINUS) && (wd->btns_d & WPAD_BUTTON_PLUS))
-      {
-        state.debugMode = !state.debugMode;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_A)
-      {
-        state.mouseX = wd->ir.x;
-        state.mouseY = wd->ir.y;
-        state.zoomView(screenW2, screenH2);
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_B)
-      {
-        state.zoom = INITIAL_ZOOM;
-        state.centerX = state.centerY = state.oldX = state.oldY = 0;
-        state.process = true;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_DOWN)
-      {
-        state.cycling = !state.cycling;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_2)
-      {
-        state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
-        state.process = true;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_1)
-      {
-        state.limit = (state.limit < LIMIT_MAX) ? (state.limit << 1) : LIMIT_MAX;
-        state.process = true;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_MINUS)
-      {
-        state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : 9;
-      }
-
-      if (wd->btns_d & WPAD_BUTTON_PLUS)
-      {
-        state.paletteIndex = (state.paletteIndex + 1) % 10;
-      }
-
-      if ((wd->btns_d & WPAD_BUTTON_HOME) || reboot)
-      {
-        shutdown_system();
-        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
-        return 0;
-      }
+      shutdown_system();
+      SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+      return 0;
     }
 
     VIDEO_SetNextFramebuffer(xfb[bufferIndex]);
