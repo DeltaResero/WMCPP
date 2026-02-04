@@ -167,9 +167,6 @@ static void renderMandelbrot(
   double ziSquared;
   int n1;
   int n2;
-  int w;
-  int screenWH;
-  int screenWHHalf;
 
   // Cache state variables locally to allow the compiler to use registers
   const int localLimit = state.limit;
@@ -182,8 +179,8 @@ static void renderMandelbrot(
   int h = 20; // Fractal rendering starts below the console area
   do
   {
-    screenWH = screenW * h;
-    screenWHHalf = (screenW * h) >> 1;
+    int screenWH = screenW * h;
+    int screenWHHalf = (screenW * h) >> 1;
 
     // Variables hoisted out of the pixel loop
     double ciSquared = 0;
@@ -204,7 +201,7 @@ static void renderMandelbrot(
     int* rowField = field + screenWH;
     u32* rowXfb = framebuffer + screenWHHalf;
 
-    w = 0;
+    int w = 0;
 
     // Calculate starting Real (X) coordinate for the row
     double rowCr = -screenW2 * localZoom + localCenterX;
@@ -357,10 +354,10 @@ static void drawdot(void* xfb, GXRModeObj* rmode, int cx, int cy, u32 color)
   int y_end = cy + ry;
 
   // Clamp to screen edges
-  if (x_start < 0) x_start = 0;
-  if (x_end >= fbWidthHalf) x_end = fbWidthHalf - 1;
-  if (y_start < 0) y_start = 0;
-  if (y_end >= height) y_end = height - 1;
+  x_start = (x_start < 0) ? 0 : x_start;
+  x_end = (x_end >= fbWidthHalf) ? fbWidthHalf - 1 : x_end;
+  y_start = (y_start < 0) ? 0 : y_start;
+  y_end = (y_end >= height) ? height - 1 : y_end;
 
   // Early exit if cursor is entirely off-screen
   if (x_start > x_end || y_start > y_end) return;
