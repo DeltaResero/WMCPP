@@ -80,8 +80,8 @@ public:
     cycle = 0;
     debugMode = false;
     // Align arrays to 32-byte boundary for DMA
-    cachedX = static_cast<double*>(memalign(32, ALIGN32(sizeof(double) * rmode->fbWidth)));
-    cachedY = static_cast<double*>(memalign(32, ALIGN32(sizeof(double) * rmode->xfbHeight)));
+    cachedX = static_cast<double*>(aligned_alloc(32, ALIGN32(sizeof(double) * rmode->fbWidth)));
+    cachedY = static_cast<double*>(aligned_alloc(32, ALIGN32(sizeof(double) * rmode->xfbHeight)));
   }
 
   ~MandelbrotState()
@@ -284,7 +284,7 @@ int main(int argc, char** argv)
   const int screenW = (rmode->fbWidth + 31) & ~31;
   const int screenH = rmode->xfbHeight;
   const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
-  field = static_cast<int*>(memalign(32, ALIGN32(sizeof(int) * screenW * screenH)));
+  field = static_cast<int*>(aligned_alloc(32, ALIGN32(sizeof(int) * screenW * screenH)));
   const int screenW2 = screenW >> 1;
   const int screenH2 = screenH >> 1;
 
