@@ -401,6 +401,38 @@ static void shutdown_system()
   }
 }
 
+/**
+ * Reports an unrecoverable startup failure and hands control back to the
+ * loader once the user has acknowledged it. The console strip is a single
+ * text row, so the caller's message has to share one line with the prompt.
+ */
+static void fatalError(const char* message)
+{
+  printf(" %s  Press HOME to exit.", message);
+
+  // Honor the console's own RESET and POWER buttons too, since a failure
+  // this early may mean no Wii Remote has been paired yet
+  while (!reboot)
+  {
+    VIDEO_WaitVSync();
+    WPAD_ScanPads();
+
+    if (WPAD_ButtonsDown(0) & WPAD_BUTTON_HOME)
+    {
+      break;
+    }
+
+    if (switchoff)
+    {
+      shutdown_system();
+      SYS_ResetSystem(SYS_POWEROFF, 0, false);
+    }
+  }
+
+  shutdown_system();
+  SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+}
+
 static void init()
 {
   VIDEO_Init();
@@ -521,6 +553,12 @@ int main(int argc, char** argv)
   const int screenH = rmode->xfbHeight;
   const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
   field = static_cast<int*>(aligned_alloc(32, ALIGN32(sizeof(int) * screenW * screenH)));
+
+  if (!field)
+  {
+    fatalError("Not enough memory for the iteration buffer.");
+    return 1;
+  }
 
   MandelbrotState state;
   bool bufferIndex = 0;
