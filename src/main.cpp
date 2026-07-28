@@ -128,14 +128,16 @@ void poweroff()
  * @param n1 First pixel's iteration count
  * @param n2 Second pixel's iteration count
  * @param limit Maximum iteration count
+ * @param cycle Palette rotation offset, applied only to points that escaped
  * @param palette Current color palette pointer
  * @return Packed 32-bit YUV value ready for framebuffer
  */
-static inline u32 PackYUVPair(int n1, int n2, int limit, PalettePtr palette)
+static inline u32 PackYUVPair(int n1, int n2, int limit, int cycle, PalettePtr palette)
 {
-  // Branchless selection: if n == limit, point to Black, otherwise point to palette color
-  const uint8_t* p1 = (n1 == limit) ? Black : palette[n1 & 255];
-  const uint8_t* p2 = (n2 == limit) ? Black : palette[n2 & 255];
+  // A count of exactly limit means the point never escaped and belongs to the
+  // set, so it stays black and only the escape counts take the rotation
+  const uint8_t* p1 = (n1 == limit) ? Black : palette[(n1 + cycle) & 255];
+  const uint8_t* p2 = (n2 == limit) ? Black : palette[(n2 + cycle) & 255];
 
   // Pack Y1, Average U, Y2, Average V
   return (p1[0] << 24) | ((p1[1] + p2[1]) >> 1 << 16) | (p2[0] << 8) | ((p1[2] + p2[2]) >> 1);
@@ -293,10 +295,10 @@ static void renderMandelbrot(
     do
     {
       // Retrieve iteration counts using pointer arithmetic
-      int n1 = rowField[w] + localCycle;
-      int n2 = rowField[w + 1] + localCycle;
+      int n1 = rowField[w];
+      int n2 = rowField[w + 1];
       // Write to XFB using pointer arithmetic
-      rowXfb[w >> 1] = PackYUVPair(n1, n2, localLimit, currentPalette);
+      rowXfb[w >> 1] = PackYUVPair(n1, n2, localLimit, localCycle, currentPalette);
       w += 2;
     } while (w < screenW);
 
