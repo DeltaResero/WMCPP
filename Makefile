@@ -44,7 +44,7 @@ STRIP = $(DEVKITPPC)/bin/powerpc-eabi-strip
 CFLAGS      :=  -O3 -Wall -flto $(MACHDEP) $(INCLUDE)
 CXXFLAGS    :=  $(CFLAGS) -fno-rtti -fno-exceptions
 
-LDFLAGS      =  -flto $(MACHDEP) -Wl,-Map,$(notdir $@).map
+LDFLAGS      =  -O3 -flto $(MACHDEP) -Wl,-Map,$(notdir $@).map
 
 #---------------------------------------------------------------------------------
 # Any extra libraries we wish to link with the project
