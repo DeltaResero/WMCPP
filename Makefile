@@ -49,13 +49,13 @@ LDFLAGS     :=  -flto $(MACHDEP) -Wl,-Map,$(notdir $@).map
 #---------------------------------------------------------------------------------
 # Any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS        :=  -lwiiuse -lbte -logc -lm -L$(PORTLIBS)/lib
+LIBS        :=  -lwiiuse -lbte -logc -lm
 
 #---------------------------------------------------------------------------------
 # List of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS     :=  -L$(LIBOGC_LIB) -L$(PORTLIBS)
+LIBDIRS     :=  $(PORTLIBS)
 
 
 #---------------------------------------------------------------------------------
