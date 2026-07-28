@@ -50,8 +50,6 @@ void poweroff();
 class MandelbrotState
 {
 public:
-  double* __attribute__((aligned(32))) cachedX;
-  double* __attribute__((aligned(32))) cachedY;
   double __attribute__((aligned(32))) centerX;
   double __attribute__((aligned(32))) centerY;
   double __attribute__((aligned(32))) oldX;
@@ -81,18 +79,10 @@ public:
     cycling = false;
     cycle = 0;
     debugMode = false;
-    // Align arrays to 32-byte boundary for DMA
-    cachedX = static_cast<double*>(aligned_alloc(32, ALIGN32(sizeof(double) * rmode->fbWidth)));
-    cachedY = static_cast<double*>(aligned_alloc(32, ALIGN32(sizeof(double) * rmode->xfbHeight)));
   }
 
-  ~MandelbrotState()
-  {
-    free(cachedX);
-    free(cachedY);
-  }
-
-  // Prevent copying to avoid double-free of cached arrays
+  // Passed by reference throughout, so a copy would silently diverge from
+  // the state the input handler mutates
   MandelbrotState(const MandelbrotState&) = delete;
   MandelbrotState& operator=(const MandelbrotState&) = delete;
 
@@ -227,7 +217,7 @@ static inline int computeMandelbrotIteration(double cr, double ci, double ciSqua
  * Renders a single row of the Mandelbrot set.
  * Extracted to reduce line count of renderMandelbrot.
  */
-static void renderRow(MandelbrotState& state, int h, int screenW, double rowCr, double ci, double ciSquared)
+static void renderRow(const MandelbrotState& state, int h, int screenW, double rowCr, double ci, double ciSquared)
 {
   int* rowField = field + (screenW * h);
   int w = 0;
@@ -246,8 +236,6 @@ static void renderRow(MandelbrotState& state, int h, int screenW, double rowCr, 
       {
         cr += localZoom;
       }
-
-      state.cachedX[currentW] = cr;
 
       // Compute Mandelbrot iteration count for this pixel
       int n1 = computeMandelbrotIteration(cr, ci, ciSquared, localLimit);
@@ -290,7 +278,6 @@ static void renderMandelbrot(
     if (localProcess)
     {
       double ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
-      state.cachedY[h] = ci;
       double ciSquared = ci * ci; // Calculate once per row
       // Render the row data if processing is needed
       renderRow(state, h, screenW, -screenW2 * localZoom + localCenterX, ci, ciSquared);
