@@ -39,8 +39,10 @@ static const uint8_t Black[3] = {0, 128, 128};
 static u32* xfb[2] = {nullptr, nullptr};
 static GXRModeObj* rmode;
 static int evctr = 0;
-static bool reboot = false;
-static bool switchoff = false;
+// Written from interrupt context by the reset and power callbacks, so every
+// read has to come from memory rather than a register the loop kept
+static volatile bool reboot = false;
+static volatile bool switchoff = false;
 static int* __attribute__((aligned(32))) field = nullptr;
 static u64 lastTime = 0;
 
