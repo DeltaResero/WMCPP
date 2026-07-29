@@ -15,7 +15,6 @@
 #include <algorithm> // For std::min, std::max
 #include <cstdio>
 #include <cstdlib>
-#include <malloc.h>
 #include <ogcsys.h>
 #include <gccore.h>
 #include <wiiuse/wpad.h>
@@ -28,6 +27,11 @@ static constexpr double INITIAL_ZOOM = 0.007;
 static constexpr int INITIAL_LIMIT = 200;
 static constexpr int LIMIT_MAX = 3200;
 static constexpr double MAX_ZOOM_PRECISION = 1e-14;
+
+// The debug strip prints Iter and AvgIterPx four columns wide each. Doubling
+// tests the limit before it grows, so it can land one step past LIMIT_MAX and
+// the fields have to hold twice the cap
+static_assert(LIMIT_MAX * 2 <= 9999, "Iter and AvgIterPx fields are four columns wide");
 
 // Pre-computed constants for cardioid/bulb check
 static constexpr double CARD_P1 = 0.25;
@@ -47,6 +51,13 @@ static volatile bool switchoff = false;
 // qualifying the pointer here would only align the pointer itself
 static int* field = nullptr;
 static u64 lastTime = 0;
+
+// Debug strip readings, held between the frame loop that measures them and the
+// display that prints them. The iteration totals describe whatever the field
+// currently holds, so they stay put on frames that only repaint it
+static u32 lastRenderMicros = 0;
+static u64 fieldIterSum = 0;
+static u32 fieldIterPixels = 0;
 
 void reset(u32, void*);
 void poweroff();
@@ -222,23 +233,31 @@ static inline int computeMandelbrotIteration(double cr, double ci, double ciSqua
 /**
  * Renders a single row of the Mandelbrot set.
  * Extracted to reduce line count of renderMandelbrot.
+ *
+ * @return Total iteration count across the row, for the debug strip's average
  */
-static void renderRow(const MandelbrotState& state, int h, int screenW, double rowCr, double ci, double ciSquared)
+static u32 renderRow(const MandelbrotState& state, int h, int screenW, double rowCr, double ci, double ciSquared)
 {
   int* rowField = field + (screenW * h);
   int w = 0;
   int localLimit = state.limit;
   double localZoom = state.zoom;
+  u32 rowSum = 0;
 
   do
   {
     // Two pixels per pass, so the running coordinate takes one addition per pair
     // instead of one per pixel and accumulates half as much rounding error
-    rowField[w] = computeMandelbrotIteration(rowCr, ci, ciSquared, localLimit);
-    rowField[w + 1] = computeMandelbrotIteration(rowCr + localZoom, ci, ciSquared, localLimit);
+    int n1 = computeMandelbrotIteration(rowCr, ci, ciSquared, localLimit);
+    int n2 = computeMandelbrotIteration(rowCr + localZoom, ci, ciSquared, localLimit);
+    rowField[w] = n1;
+    rowField[w + 1] = n2;
+    rowSum += static_cast<u32>(n1 + n2);
     w += 2;
     rowCr += 2.0 * localZoom;
   } while (w < screenW);
+
+  return rowSum;
 }
 
 
@@ -262,6 +281,12 @@ static void renderMandelbrot(
   const bool localProcess = state.process;
   const int localCycle = state.cycle;
 
+  if (localProcess)
+  {
+    fieldIterSum = 0;
+    fieldIterPixels = 0;
+  }
+
   int h = 20; // Fractal rendering starts below the console area
   do
   {
@@ -272,7 +297,8 @@ static void renderMandelbrot(
       double ci = -1.0 * (h - screenH2) * localZoom - localCenterY;
       double ciSquared = ci * ci; // Calculate once per row
       // Render the row data if processing is needed
-      renderRow(state, h, screenW, -screenW2 * localZoom + localCenterX, ci, ciSquared);
+      fieldIterSum += renderRow(state, h, screenW, -screenW2 * localZoom + localCenterX, ci, ciSquared);
+      fieldIterPixels += static_cast<u32>(screenW);
     }
 
     // Draw pixels to XFB
@@ -299,20 +325,45 @@ static void renderMandelbrot(
 }
 
 /**
+ * Writes a number right aligned into a field exactly width columns wide, or a
+ * "999+" style marker when it will not fit. The console is one row tall and
+ * text past its last column wraps onto a row that is not there, so every field
+ * on the debug strip has to have a width that cannot grow.
+ */
+static void fitField(char* out, size_t size, double value, int markerCap, int width, int decimals)
+{
+  if (snprintf(out, size, "%*.*f", width, decimals, value) > width)
+  {
+    snprintf(out, size, "%*d+", width - 1, markerCap);
+  }
+}
+
+/**
  * Updates the display with coordinate information
  */
 static void updateDisplay(const MandelbrotState& state, const WPADData* wd, int screenW2, int screenH2)
 {
+  // Sampled every frame rather than only in debug mode, so the first frame
+  // after the toggle measures one frame instead of the whole time it was off
+  u64 currentTime = gettime();
+  u32 frameMicros = static_cast<u32>(ticks_to_microsecs(currentTime - lastTime));
+  lastTime = currentTime;
+
   if (state.debugMode)
   {
-    u64 currentTime = gettime();
-    u32 frameTime = (u32)((currentTime - lastTime) * 1000 / TB_TIMER_CLOCK);
-    lastTime = currentTime;
+    u32 fps = (frameMicros > 0) ? ((1000000u + (frameMicros >> 1)) / frameMicros) : 0;
+    u32 avgIterPx = (fieldIterPixels > 0) ? static_cast<u32>(fieldIterSum / fieldIterPixels) : 0;
 
-    struct mallinfo mi = mallinfo();
-    float memused = mi.uordblks / (1024.0f * 1024.0f);
+    char fpsText[8];
+    char renderText[12];
+    char freeText[12];
+    fitField(fpsText, sizeof(fpsText), fps, 999, 4, 0);
+    fitField(renderText, sizeof(renderText), lastRenderMicros / 1000.0, 9999, 6, 1);
+    fitField(freeText, sizeof(freeText), SYS_GetArena1Size() / (1024.0 * 1024.0), 999, 5, 1);
 
-    printf(" Frame Time:%d Mem: %.1fMB Iter: %d", frameTime, memused, state.limit);
+    printf(" FPS:%s RenTime:%sms Iter:%4d AvgIterPx:%4u FreeMem:%sMB Bat:%3u",
+      fpsText, renderText, state.limit, avgIterPx, freeText,
+      static_cast<unsigned>(wd ? wd->battery_level : 0));
   }
   else
   {
@@ -571,7 +622,9 @@ int main(int argc, char** argv)
     }
     console_init(xfb[bufferIndex], 4, 0, rmode->fbWidth - 8, 20, fbStride);
 
+    u64 renderStart = gettime();
     renderMandelbrot(state, xfb[bufferIndex], currentPalette, screenW, screenH, screenW >> 1, screenH >> 1);
+    lastRenderMicros = static_cast<u32>(ticks_to_microsecs(gettime() - renderStart));
 
     if (state.cycling)
     {
