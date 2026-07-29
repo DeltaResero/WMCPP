@@ -28,10 +28,9 @@ static constexpr int INITIAL_LIMIT = 200;
 static constexpr int LIMIT_MAX = 3200;
 static constexpr double MAX_ZOOM_PRECISION = 1e-14;
 
-// The debug strip prints Iter and AvgIterPx four columns wide each. Doubling
-// tests the limit before it grows, so it can land one step past LIMIT_MAX and
-// the fields have to hold twice the cap
-static_assert(LIMIT_MAX * 2 <= 9999, "Iter and AvgIterPx fields are four columns wide");
+// The debug strip prints Iter and AvgIterPx four columns wide each, and neither
+// can exceed the limit
+static_assert(LIMIT_MAX <= 9999, "Iter and AvgIterPx fields are four columns wide");
 
 // Pre-computed constants for cardioid/bulb check
 static constexpr double CARD_P1 = 0.25;
@@ -572,7 +571,11 @@ static bool handleInput(MandelbrotState& state, const WPADData* wd, int screenW2
 
   if (wd->btns_d & WPAD_BUTTON_1)
   {
-    state.limit = (state.limit < LIMIT_MAX) ? (state.limit << 1) : LIMIT_MAX;
+    // Clamp the doubled value rather than the value going in. Halving drops the
+    // low bit, so 25 becomes 12 and the ladder leaves the powers of two that
+    // divide LIMIT_MAX. Testing before the shift lets 3072 double clean past it
+    const int doubled = state.limit << 1;
+    state.limit = (doubled < LIMIT_MAX) ? doubled : LIMIT_MAX;
     state.process = true;
   }
 
