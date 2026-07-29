@@ -543,6 +543,52 @@ static void init()
 }
 
 /**
+ * Palette buttons and the chord of both that toggles debug mode
+ */
+static void handlePaletteButtons(MandelbrotState& state, const WPADData* wd)
+{
+  // Both palette handlers below also fire on this chord. They step down and
+  // then back up, which cancels for any palette count, so debug mode toggles
+  // without disturbing the palette
+  if ((wd->btns_d & WPAD_BUTTON_MINUS) && (wd->btns_d & WPAD_BUTTON_PLUS))
+  {
+    state.debugMode = !state.debugMode;
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_MINUS)
+  {
+    state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : (GetPaletteCount() - 1);
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_PLUS)
+  {
+    state.paletteIndex = (state.paletteIndex + 1) % GetPaletteCount();
+  }
+}
+
+/**
+ * Iteration limit buttons
+ */
+static void handleLimitButtons(MandelbrotState& state, const WPADData* wd)
+{
+  if (wd->btns_d & WPAD_BUTTON_2)
+  {
+    state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
+    state.process = true;
+  }
+
+  if (wd->btns_d & WPAD_BUTTON_1)
+  {
+    // Clamp the doubled value rather than the value going in. Halving drops the
+    // low bit, so 25 becomes 12 and the ladder leaves the powers of two that
+    // divide LIMIT_MAX. Testing before the shift lets 3072 double clean past it
+    const int doubled = state.limit << 1;
+    state.limit = (doubled < LIMIT_MAX) ? doubled : LIMIT_MAX;
+    state.process = true;
+  }
+}
+
+/**
  * Input Handler
  */
 static bool handleInput(MandelbrotState& state, const WPADData* wd, int screenW2, int screenH2)
@@ -552,13 +598,8 @@ static bool handleInput(MandelbrotState& state, const WPADData* wd, int screenW2
     return false;
   }
 
-  // Both palette handlers below also fire on this chord. They step down and
-  // then back up, which cancels for any palette count, so debug mode toggles
-  // without disturbing the palette
-  if ((wd->btns_d & WPAD_BUTTON_MINUS) && (wd->btns_d & WPAD_BUTTON_PLUS))
-  {
-    state.debugMode = !state.debugMode;
-  }
+  handlePaletteButtons(state, wd);
+  handleLimitButtons(state, wd);
 
   if (wd->btns_d & WPAD_BUTTON_A)
   {
@@ -577,32 +618,6 @@ static bool handleInput(MandelbrotState& state, const WPADData* wd, int screenW2
   if (wd->btns_d & WPAD_BUTTON_DOWN)
   {
     state.cycling = !state.cycling;
-  }
-
-  if (wd->btns_d & WPAD_BUTTON_2)
-  {
-    state.limit = (state.limit > 1) ? (state.limit >> 1) : 1;
-    state.process = true;
-  }
-
-  if (wd->btns_d & WPAD_BUTTON_1)
-  {
-    // Clamp the doubled value rather than the value going in. Halving drops the
-    // low bit, so 25 becomes 12 and the ladder leaves the powers of two that
-    // divide LIMIT_MAX. Testing before the shift lets 3072 double clean past it
-    const int doubled = state.limit << 1;
-    state.limit = (doubled < LIMIT_MAX) ? doubled : LIMIT_MAX;
-    state.process = true;
-  }
-
-  if (wd->btns_d & WPAD_BUTTON_MINUS)
-  {
-    state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : (GetPaletteCount() - 1);
-  }
-
-  if (wd->btns_d & WPAD_BUTTON_PLUS)
-  {
-    state.paletteIndex = (state.paletteIndex + 1) % GetPaletteCount();
   }
 
   return ((wd->btns_d & WPAD_BUTTON_HOME) || reboot);
