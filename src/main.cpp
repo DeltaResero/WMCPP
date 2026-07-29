@@ -338,6 +338,47 @@ static void fitField(char* out, size_t size, double value, int markerCap, int wi
 }
 
 /**
+ * Prints the debug strip: frame timings, iteration counts, memory, battery
+ */
+static void printDebugLine(const MandelbrotState& state, const WPADData* wd, u32 frameMicros)
+{
+  u32 fps = (frameMicros > 0) ? ((1000000u + (frameMicros >> 1)) / frameMicros) : 0;
+  u32 avgIterPx = (fieldIterPixels > 0) ? static_cast<u32>(fieldIterSum / fieldIterPixels) : 0;
+
+  char fpsText[8];
+  char renderText[12];
+  char freeText[12];
+  fitField(fpsText, sizeof(fpsText), fps, 999, 4, 0);
+  fitField(renderText, sizeof(renderText), lastRenderMicros / 1000.0, 9999, 6, 1);
+  fitField(freeText, sizeof(freeText), SYS_GetArena1Size() / (1024.0 * 1024.0), 999, 5, 1);
+
+  printf(" FPS:%s RenTime:%sms Iter:%4d AvgIterPx:%4u FreeMem:%sMB Bat:%3u",
+    fpsText, renderText, state.limit, avgIterPx, freeText,
+    static_cast<unsigned>(wd ? wd->battery_level : 0));
+}
+
+/**
+ * Prints the normal strip: view centre, zoom, and the cursor's coordinate
+ */
+static void printCoordinateLine(const MandelbrotState& state, const WPADData* wd, int screenW2, int screenH2)
+{
+  printf(" cX:%.8f cY:%.8f", state.centerX, state.centerY == -0.0 ? 0.0 : -state.centerY);
+  printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
+
+  // Display cursor coordinates if IR is valid
+  if (wd && wd->ir.valid)
+  {
+    printf(" re:%.8f im:%.8f",
+      (wd->ir.x - screenW2) * state.zoom + state.centerX,
+      (screenH2 - wd->ir.y) * state.zoom - state.centerY);
+  }
+  else if (wd)
+  {
+    printf(" No Cursor");
+  }
+}
+
+/**
  * Updates the display with coordinate information
  */
 static void updateDisplay(const MandelbrotState& state, const WPADData* wd, int screenW2, int screenH2)
@@ -350,36 +391,11 @@ static void updateDisplay(const MandelbrotState& state, const WPADData* wd, int 
 
   if (state.debugMode)
   {
-    u32 fps = (frameMicros > 0) ? ((1000000u + (frameMicros >> 1)) / frameMicros) : 0;
-    u32 avgIterPx = (fieldIterPixels > 0) ? static_cast<u32>(fieldIterSum / fieldIterPixels) : 0;
-
-    char fpsText[8];
-    char renderText[12];
-    char freeText[12];
-    fitField(fpsText, sizeof(fpsText), fps, 999, 4, 0);
-    fitField(renderText, sizeof(renderText), lastRenderMicros / 1000.0, 9999, 6, 1);
-    fitField(freeText, sizeof(freeText), SYS_GetArena1Size() / (1024.0 * 1024.0), 999, 5, 1);
-
-    printf(" FPS:%s RenTime:%sms Iter:%4d AvgIterPx:%4u FreeMem:%sMB Bat:%3u",
-      fpsText, renderText, state.limit, avgIterPx, freeText,
-      static_cast<unsigned>(wd ? wd->battery_level : 0));
+    printDebugLine(state, wd, frameMicros);
   }
   else
   {
-    printf(" cX:%.8f cY:%.8f", state.centerX, state.centerY == -0.0 ? 0.0 : -state.centerY);
-    printf("  zoom:%.4e ", INITIAL_ZOOM / state.zoom);
-  }
-
-  // Display cursor coordinates if IR is valid
-  if (wd && wd->ir.valid && !state.debugMode)
-  {
-    printf(" re:%.8f im:%.8f",
-      (wd->ir.x - screenW2) * state.zoom + state.centerX,
-      (screenH2 - wd->ir.y) * state.zoom - state.centerY);
-  }
-  else if (wd && !state.debugMode)
-  {
-    printf(" No Cursor");
+    printCoordinateLine(state, wd, screenW2, screenH2);
   }
 }
 
