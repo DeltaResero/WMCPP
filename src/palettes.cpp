@@ -408,4 +408,9 @@ PalettePtr GetPalettePtr(uint8_t paletteIndex)
   return PaletteTable[paletteIndex];
 }
 
+int GetPaletteCount()
+{
+  return PaletteCount;
+}
+
 // EOF

@@ -486,6 +486,9 @@ static bool handleInput(MandelbrotState& state, const WPADData* wd, int screenW2
     return false;
   }
 
+  // Both palette handlers below also fire on this chord. They step down and
+  // then back up, which cancels for any palette count, so debug mode toggles
+  // without disturbing the palette
   if ((wd->btns_d & WPAD_BUTTON_MINUS) && (wd->btns_d & WPAD_BUTTON_PLUS))
   {
     state.debugMode = !state.debugMode;
@@ -524,12 +527,12 @@ static bool handleInput(MandelbrotState& state, const WPADData* wd, int screenW2
 
   if (wd->btns_d & WPAD_BUTTON_MINUS)
   {
-    state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : 9;
+    state.paletteIndex = (state.paletteIndex > 0) ? (state.paletteIndex - 1) : (GetPaletteCount() - 1);
   }
 
   if (wd->btns_d & WPAD_BUTTON_PLUS)
   {
-    state.paletteIndex = (state.paletteIndex + 1) % 10;
+    state.paletteIndex = (state.paletteIndex + 1) % GetPaletteCount();
   }
 
   return ((wd->btns_d & WPAD_BUTTON_HOME) || reboot);
