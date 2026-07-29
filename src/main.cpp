@@ -232,25 +232,11 @@ static void renderRow(const MandelbrotState& state, int h, int screenW, double r
 
   do
   {
-    // Unrolled loop for two pixels to maximize register usage and minimize branching
-    for (int i = 0; i < 2; ++i)
-    {
-      int currentW = w + i;
-      // Use incremental addition instead of multiplication: cr = rowCr + (i * localZoom)
-      double cr = rowCr;
-      if (i == 1)
-      {
-        cr += localZoom;
-      }
-
-      // Compute Mandelbrot iteration count for this pixel
-      int n1 = computeMandelbrotIteration(cr, ci, ciSquared, localLimit);
-
-      // Use pointer arithmetic: rowField[index] instead of field[index + offset]
-      rowField[currentW] = n1;
-    }
+    // Two pixels per pass, so the running coordinate takes one addition per pair
+    // instead of one per pixel and accumulates half as much rounding error
+    rowField[w] = computeMandelbrotIteration(rowCr, ci, ciSquared, localLimit);
+    rowField[w + 1] = computeMandelbrotIteration(rowCr + localZoom, ci, ciSquared, localLimit);
     w += 2;
-    // Increment the base X coordinate for the next pair of pixels
     rowCr += 2.0 * localZoom;
   } while (w < screenW);
 }
