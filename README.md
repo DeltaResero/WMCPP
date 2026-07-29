@@ -18,6 +18,7 @@ explore the fractal using a Wii Remote.
 - Real-time zooming into the Mandelbrot set using a Wii Remote
 - Adjustable color palettes with cycling options
 - Configurable maximum iterations for higher precision rendering
+- Optional debug readout showing frame rate, render time, and free memory
 - Exit functionality using the HOME button on the Wii Remote
 
 ## Controls
@@ -28,6 +29,7 @@ explore the fractal using a Wii Remote.
 | A Button               | Zoom in                          |
 | B Button               | Start over                       |
 | - / + Buttons          | Cycle through color palettes     |
+| - and + Together       | Toggle the debug readout         |
 | D-Pad Down             | Run cycling palette              |
 | 1 / 2 Buttons          | Change the number of iterations  |
 | HOME Button            | Exit                             |
@@ -58,13 +60,16 @@ instructions on the official devkitPro wiki:
 
 ## How to Use
 
-1. Rename the compiled `.dol` file to `boot.dol` and place it in an `apps/WMCPP`
-   folder on your SD card.
-2. Insert the SD card into your Wii.
-3. Launch the Homebrew Channel, and select the WMCPP application.
-4. Use the Wii Remote to zoom in and explore the Mandelbrot set, cycling
+1. Copy the included `hbc/apps/WMCPP` folder to `apps/WMCPP` on your SD card.
+   It supplies the `icon.png` and `meta.xml` that the Homebrew Channel reads
+   to list the application.
+2. Rename the compiled `.dol` file to `boot.dol` and place it in that same
+   folder, alongside the icon and metadata.
+3. Insert the SD card into your Wii.
+4. Launch the Homebrew Channel, and select the WMCPP application.
+5. Use the Wii Remote to zoom in and explore the Mandelbrot set, cycling
    through palettes and changing iterations for more detailed images.
-5. Exit the application using the HOME button.
+6. Exit the application using the HOME button.
 
 <br>
 
