@@ -43,7 +43,9 @@ static int evctr = 0;
 // read has to come from memory rather than a register the loop kept
 static volatile bool reboot = false;
 static volatile bool switchoff = false;
-static int* __attribute__((aligned(32))) field = nullptr;
+// The buffer's 32-byte alignment comes from aligned_alloc at the call site;
+// qualifying the pointer here would only align the pointer itself
+static int* field = nullptr;
 static u64 lastTime = 0;
 
 void reset(u32, void*);
@@ -52,10 +54,10 @@ void poweroff();
 class MandelbrotState
 {
 public:
-  double __attribute__((aligned(32))) centerX;
-  double __attribute__((aligned(32))) centerY;
-  double __attribute__((aligned(32))) oldX;
-  double __attribute__((aligned(32))) oldY;
+  double centerX;
+  double centerY;
+  double oldX;
+  double oldY;
   int mouseX;
   int mouseY;
   int limit;
