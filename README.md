@@ -18,7 +18,7 @@ explore the fractal using a Wii Remote.
 - Real-time zooming into the Mandelbrot set using a Wii Remote
 - Adjustable color palettes with cycling options
 - Configurable maximum iterations for higher precision rendering
-- Optional debug readout showing frame rate, render time, and free memory
+- Optional debug readout with frame rate, render time, memory, and battery level
 - Exit functionality using the HOME button on the Wii Remote
 
 ## Controls
