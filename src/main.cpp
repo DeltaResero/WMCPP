@@ -623,6 +623,56 @@ static bool handleInput(MandelbrotState& state, const WPADData* wd, int screenW2
   return ((wd->btns_d & WPAD_BUTTON_HOME) || reboot);
 }
 
+/**
+ * Renders one frame into the given buffer, overlays the text and the pointer,
+ * reads input, then presents the buffer. Quitting returns before the present,
+ * so the frame the user quit on is never flipped in
+ *
+ * @return True when the user asked to quit
+ */
+static bool runFrame(MandelbrotState& state, u32* fb, int screenW, int screenH, int fbStride)
+{
+  PalettePtr currentPalette = GetPalettePtr(state.paletteIndex);
+
+  // Clear the top 20 pixels of the current buffer to prevent text smearing
+  for (int i = 0; i < (screenW * 20) >> 1; i++)
+  {
+    fb[i] = COLOR_BLACK;
+  }
+  console_init(fb, 4, 0, rmode->fbWidth - 8, 20, fbStride);
+
+  u64 renderStart = gettime();
+  renderMandelbrot(state, fb, currentPalette, screenW, screenH, screenW >> 1, screenH >> 1);
+  lastRenderMicros = static_cast<u32>(ticks_to_microsecs(gettime() - renderStart));
+
+  if (state.cycling)
+  {
+    ++state.cycle;
+  }
+
+  u32 type;
+  WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
+  WPADData* wd = (WPAD_Probe(0, &type) == WPAD_ERR_NONE) ? WPAD_Data(0) : nullptr;
+
+  updateDisplay(state, wd, screenW >> 1, screenH >> 1);
+
+  if (wd && wd->ir.valid)
+  {
+    drawdot(fb, rmode, static_cast<int>(wd->ir.x), static_cast<int>(wd->ir.y), COLOR_RED);
+  }
+
+  if (handleInput(state, wd, screenW >> 1, screenH >> 1))
+  {
+    return true;
+  }
+
+  VIDEO_SetNextFramebuffer(fb);
+  VIDEO_Flush();
+  VIDEO_WaitVSync();
+
+  return false;
+}
+
 int main(int argc, char** argv)
 {
   init();
@@ -642,49 +692,17 @@ int main(int argc, char** argv)
 
   MandelbrotState state;
   bool bufferIndex = 0;
-  u32 type;
 
   do
   {
     bufferIndex = !bufferIndex;
-    PalettePtr currentPalette = GetPalettePtr(state.paletteIndex);
 
-    // Clear the top 20 pixels of the current buffer to prevent text smearing
-    for (int i = 0; i < (screenW * 20) >> 1; i++)
-    {
-      xfb[bufferIndex][i] = COLOR_BLACK;
-    }
-    console_init(xfb[bufferIndex], 4, 0, rmode->fbWidth - 8, 20, fbStride);
-
-    u64 renderStart = gettime();
-    renderMandelbrot(state, xfb[bufferIndex], currentPalette, screenW, screenH, screenW >> 1, screenH >> 1);
-    lastRenderMicros = static_cast<u32>(ticks_to_microsecs(gettime() - renderStart));
-
-    if (state.cycling)
-    {
-      ++state.cycle;
-    }
-
-    WPAD_ReadPending(WPAD_CHAN_ALL, countevs);
-    WPADData* wd = (WPAD_Probe(0, &type) == WPAD_ERR_NONE) ? WPAD_Data(0) : nullptr;
-
-    updateDisplay(state, wd, screenW >> 1, screenH >> 1);
-
-    if (wd && wd->ir.valid)
-    {
-      drawdot(xfb[bufferIndex], rmode, static_cast<int>(wd->ir.x), static_cast<int>(wd->ir.y), COLOR_RED);
-    }
-
-    if (handleInput(state, wd, screenW >> 1, screenH >> 1))
+    if (runFrame(state, xfb[bufferIndex], screenW, screenH, fbStride))
     {
       shutdown_system();
       SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
       return 0;
     }
-
-    VIDEO_SetNextFramebuffer(xfb[bufferIndex]);
-    VIDEO_Flush();
-    VIDEO_WaitVSync();
 
     if (switchoff)
     {
