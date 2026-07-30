@@ -41,7 +41,6 @@ static const uint8_t Black[3] = {0, 128, 128};
 
 static u32* xfb[2] = {nullptr, nullptr};
 static GXRModeObj* rmode;
-static int evctr = 0;
 // Written from interrupt context by the reset and power callbacks, so every
 // read has to come from memory rather than a register the loop kept
 static volatile bool reboot = false;
@@ -433,9 +432,12 @@ static void drawdot(void* xfb, GXRModeObj* rmode, int cx, int cy, u32 color)
   }
 }
 
+/**
+ * Does nothing on purpose. WPAD_ReadPending needs somewhere to report each
+ * event it drains, and draining is the only reason the call is there
+ */
 static void countevs(int chan, const WPADData* data)
 {
-  ++evctr;
 }
 
 static void cleanup_field()

@@ -384,20 +384,6 @@ namespace
   static const int PaletteCount = sizeof(PaletteTable) / sizeof(PaletteTable[0]);
 }  // namespace
 
-// Implementation of the Palette function
-void Palette(uint8_t paletteIndex, int iterations, int *y, int *u, int *v)
-{
-  // Safety check to prevent out of bounds access
-  uint8_t safeIndex = (paletteIndex >= PaletteCount) ? 0 : paletteIndex;
-
-  const uint8_t (*p)[256][3] = (const uint8_t (*)[256][3])PaletteTable[safeIndex];
-
-  iterations = iterations & 255;          // Adjust iteration count to range 0..255
-  *y = (*p)[iterations][0];               // Select and pass Y, U, V components
-  *u = (*p)[iterations][1];
-  *v = (*p)[iterations][2];
-}
-
 PalettePtr GetPalettePtr(uint8_t paletteIndex)
 {
   // Safety check to prevent out of bounds access
