@@ -491,6 +491,25 @@ static void fatalError(const char* message)
   SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
 }
 
+/**
+ * Picks the framebuffer mode for the console's TV standard. Everything else
+ * takes NTSC timings, which is what EURGB60 wants anyway, and the two debug
+ * standards need a decoder no retail console has
+ */
+static GXRModeObj* selectVideoMode()
+{
+  switch (VIDEO_GetCurrentTvMode())
+  {
+    case VI_PAL:
+      return &TVPal528IntDf;
+    case VI_MPAL:
+      return &TVMpal480IntDf;
+    case VI_NTSC:
+    default:
+      return &TVNtsc480IntDf;
+  }
+}
+
 static void init()
 {
   VIDEO_Init();
@@ -498,20 +517,7 @@ static void init()
   SYS_SetResetCallback(reset);
   SYS_SetPowerCallback(poweroff);
 
-  switch (VIDEO_GetCurrentTvMode())
-  {
-    case VI_NTSC:
-      rmode = &TVNtsc480IntDf;
-      break;
-    case VI_PAL:
-      rmode = &TVPal528IntDf;
-      break;
-    case VI_MPAL:
-      rmode = &TVMpal480IntDf;
-      break;
-    default:
-      rmode = &TVNtsc480IntDf;
-  }
+  rmode = selectVideoMode();
 
   VIDEO_Configure(rmode);
 
