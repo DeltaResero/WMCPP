@@ -514,8 +514,24 @@ static void init()
   }
 
   VIDEO_Configure(rmode);
-  xfb[0] = static_cast<u32*>(MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode)));
-  xfb[1] = static_cast<u32*>(MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode)));
+
+  // Check the allocations before converting them. MEM_K0_TO_K1 only adds a
+  // fixed offset, so a failed allocation turns into a non-null address that
+  // every later null test accepts, including the guards in shutdown_system
+  void* rawXfb0 = SYS_AllocateFramebuffer(rmode);
+  void* rawXfb1 = SYS_AllocateFramebuffer(rmode);
+
+  // Both buffers have to exist before anything can be drawn, so there is no
+  // console to report a failure on. Hand back to the loader instead
+  if (!rawXfb0 || !rawXfb1)
+  {
+    free(rawXfb0);
+    free(rawXfb1);
+    SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+  }
+
+  xfb[0] = static_cast<u32*>(MEM_K0_TO_K1(rawXfb0));
+  xfb[1] = static_cast<u32*>(MEM_K0_TO_K1(rawXfb1));
 
   const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
   int console_x = 4;
