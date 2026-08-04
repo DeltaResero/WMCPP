@@ -703,9 +703,15 @@ int main(int argc, char** argv)
   std::atexit(cleanup_field);
   lastTime = gettime();
 
-  const int screenW = (rmode->fbWidth + 31) & ~31;
-  const int screenH = rmode->xfbHeight;
+  // libogc sizes a framebuffer row as the width rounded up to a multiple of 16
+  // and doubled, which is the same number fbStride works out to for any width.
+  // The render loop strides a row as screenW / 2 words, so screenW has to come
+  // from fbStride. Rounding fbWidth up to 32 on its own gave the same 640 for
+  // every mode selectVideoMode returns, and a longer row than the hardware has
+  // for any width that is not a multiple of 32
   const int fbStride = ((rmode->fbWidth * VI_DISPLAY_PIX_SZ) + 31) & ~31;
+  const int screenW = fbStride / VI_DISPLAY_PIX_SZ;
+  const int screenH = rmode->xfbHeight;
   field = static_cast<int*>(aligned_alloc(32, ALIGN32(sizeof(int) * screenW * screenH)));
 
   if (!field)
