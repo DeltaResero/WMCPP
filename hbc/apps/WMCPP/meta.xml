@@ -2,8 +2,8 @@
 <app version="1">
 	<name>WMCPP</name>
 	<coder>DeltaResero, Krupkat</coder>
-	<version>2.0</version>
-	<release_date>2025-12-19</release_date>
+	<version>2.1</version>
+	<release_date>20260803000000</release_date>
 	<short_description>Mandelbrot Explorer for Wii</short_description>
 	<long_description>WMCPP is an interactive Mandelbrot set explorer. Use the Wii Remote to zoom into fractal depths with customizable palettes.
 

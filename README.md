@@ -18,8 +18,12 @@ explore the fractal using a Wii Remote.
 - Real-time zooming into the Mandelbrot set using a Wii Remote
 - Adjustable color palettes with cycling options
 - Configurable maximum iterations for higher precision rendering
-- Optional debug readout with frame rate, render time, memory, and battery level
-- Exit functionality using the HOME button on the Wii Remote
+- On-screen readout of the view centre, zoom level, and the coordinate under
+  the cursor
+- Optional debug readout with frame rate, render time, iteration count, average
+  iterations per pixel, free memory, and Wii Remote battery level
+- Exit with the HOME button, returning to whichever loader started the
+  application
 
 ## Controls
 
@@ -30,8 +34,8 @@ explore the fractal using a Wii Remote.
 | B Button               | Start over                       |
 | - / + Buttons          | Cycle through color palettes     |
 | - and + Together       | Toggle the debug readout         |
-| D-Pad Down             | Run cycling palette              |
-| 1 / 2 Buttons          | Change the number of iterations  |
+| D-Pad Down             | Toggle palette cycling           |
+| 1 / 2 Buttons          | Double / halve the iterations    |
 | HOME Button            | Exit                             |
 
 ## How to Build
@@ -70,6 +74,19 @@ instructions on the official devkitPro wiki:
 5. Use the Wii Remote to zoom in and explore the Mandelbrot set, cycling
    through palettes and changing iterations for more detailed images.
 6. Exit the application using the HOME button.
+
+## A Note on Overscan
+
+Most televisions crop the edges of the picture, often by about five percent on
+each side. The readout sits in the top 20 scanlines, which is roughly four
+percent of the picture height, so on a set that overscans it can fall entirely
+off the top of the screen and appear to be missing. The same crop takes a strip
+off each edge of the fractal.
+
+The Wii sends the whole frame and the television decides how much of it to
+show, so a display that can present the picture unscaled will show the readout.
+Manufacturers name that setting differently, among them Just Scan, Full Pixel,
+1:1, Screen Fit, and Dot by Dot.
 
 <br>
 
