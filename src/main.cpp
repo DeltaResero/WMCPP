@@ -490,7 +490,7 @@ static void fatalError(const char* message)
   }
 
   shutdown_system();
-  SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+  exit(1);
 }
 
 /**
@@ -535,7 +535,7 @@ static void init()
   {
     free(rawXfb0);
     free(rawXfb1);
-    SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+    exit(1);
   }
 
   xfb[0] = static_cast<u32*>(MEM_K0_TO_K1(rawXfb0));
@@ -724,7 +724,6 @@ int main(int argc, char** argv)
     if (runFrame(state, xfb[bufferIndex], screenW, screenH, fbStride))
     {
       shutdown_system();
-      SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
       return 0;
     }
 
