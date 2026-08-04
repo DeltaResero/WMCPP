@@ -42,7 +42,7 @@ STRIP = $(DEVKITPPC)/bin/powerpc-eabi-strip
 #---------------------------------------------------------------------------------
 
 CFLAGS      :=  -O3 -Wall -flto $(MACHDEP) $(INCLUDE)
-CXXFLAGS    :=  $(CFLAGS) -fno-rtti -fno-exceptions
+CXXFLAGS    :=  $(CFLAGS) -std=c++20 -fno-rtti -fno-exceptions
 
 LDFLAGS      =  -O3 -flto $(MACHDEP) -Wl,-Map,$(notdir $@).map
 
